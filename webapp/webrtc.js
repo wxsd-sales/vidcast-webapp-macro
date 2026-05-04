@@ -3,9 +3,11 @@ export class MultiWebRTCDataConnection {
    * @param {object} xapi - An instance of the xAPI codec connection (jsxapi).
    * @param {string} mode - Either 'player' or 'controls'.
    */
-  constructor(xapi, mode) {
+  constructor(xapi, mode, app) {
     this.xapi = xapi;
     this.mode = mode;
+    this.role = normalizeMode(mode);
+    this.app = app;
     this.peerConnections = {};
     this.dataChannels = {};
     this.eventHandlers = {
@@ -14,23 +16,37 @@ export class MultiWebRTCDataConnection {
       error: [],
     };
 
+    if (typeof this.xapi == "undefined") {
+      window.addEventListener("message", (event) => {
+        console.log(this.mode, " received message:\n", event);
+        this._handleSignalingMessage(event.data);
+      });
+    } else {
+      this.xapi.Event.Message.Send.on((event) => {
+        this._handleSignalingMessage(event.Text);
+      });
+    }
+    // Listen for incoming signaling messages from codec
 
-    if (this.mode == "controls") {
-      this._createPeerConnection();
+    if (this.role == "player") {
+      this._sendSignalingMessage({ type: "playerReady" });
     }
 
+    if (this.role == "controls") {
+      this._createPeerConnection();
+    }
+  }
 
-    // Listen for incoming signaling messages from codec
-    this.xapi.Event.Message.Send.on((event) => {
-      this._handleSignalingMessage(event);
-    });
-
-    if(this.mode == 'player'){
-        this.xapi.Command.Message.Send({
-      Text: JSON.stringify({
-        type: "playerReady"
-      }),
-    });
+  _sendSignalingMessage(message) {
+    const payload = this.app?.panelId ? { ...message, app: this.app } : message;
+    console.log(this.mode, "sending message:", payload);
+    if (typeof this.xapi == "undefined") {
+      console.log("Number for Frames:", window.top.frames.length);
+      for (let i = 0; i < window.top.frames.length; i++) {
+        window.top.frames[i].postMessage(JSON.stringify(payload));
+      }
+    } else {
+      this.xapi.Command.Message.Send({ Text: JSON.stringify(payload) });
     }
   }
 
@@ -50,7 +66,7 @@ export class MultiWebRTCDataConnection {
     // Create data channel for sending/receiving messages
     const dc = pc.createDataChannel(`dataChannel${index}`);
 
-    if (this.mode == "controller") {
+    if (this.role == "controls") {
       this._subscribeDataChannel(dc, index);
     } else {
       pc.ondatachannel = (event) => {
@@ -61,17 +77,15 @@ export class MultiWebRTCDataConnection {
 
     // Handle ICE candidates and send them via codec xAPI Message Send
     pc.onicecandidate = (event) => {
-      if (this.mode == "player") return;
+      if (this.role == "player") return;
       if (event.candidate) {
         //console.log("onice:", event.candidate);
         //console.log("Broadcasting ICE candidate from:", this.mode);
-        this.xapi.Command.Message.Send({
-          Text: JSON.stringify({
-            mode: this.mode,
-            type: "ice-candidate",
-            candidate: event.candidate,
-            connectionIndex: index,
-          }),
+        this._sendSignalingMessage({
+          mode: this.mode,
+          type: "ice-candidate",
+          candidate: event.candidate,
+          connectionIndex: index,
         });
       }
     };
@@ -94,17 +108,17 @@ export class MultiWebRTCDataConnection {
 
     //console.log("Sending Offer for index", index, "This Mode:", this.mode);
 
-    this.xapi.Command.Message.Send({
-      Text: JSON.stringify({
-        mode: this.mode,
-        type: "offer",
-        sdp: offer.sdp,
-        connectionIndex: index,
-      }),
+    this._sendSignalingMessage({
+      mode: this.mode,
+      type: "offer",
+      sdp: offer.sdp,
+      connectionIndex: index,
     });
   }
 
   _subscribeDataChannel(dc, index) {
+    this.dataChannels[index] = dc;
+
     dc.onopen = () => {
       this._emitEvent("open", { connectionIndex: index });
       console.log(`Data channel ${index} open`);
@@ -119,33 +133,39 @@ export class MultiWebRTCDataConnection {
       this._emitEvent("error", { connectionIndex: index, error });
       console.error(`Data channel ${index} error:`, error);
     };
-    dc.onclose = (event) => { console.log('connection closed',event)
-        this._emitEvent("close", { connectionIndex: index, event });
-        console.log(`Data channel ${index} closed`);
-        this.dataChannels[index] = null;
-        this.peerConnections[index] = null;
-        delete this.dataChannels[index];
-        delete this.peerConnections[index];
-    }
+    dc.onclose = (event) => {
+      console.log("connection closed", event);
+      this._emitEvent("close", { connectionIndex: index, event });
+      console.log(`Data channel ${index} closed`);
+      this.dataChannels[index] = null;
+      this.peerConnections[index] = null;
+      delete this.dataChannels[index];
+      delete this.peerConnections[index];
+    };
   }
 
   // Internal method to handle incoming signaling messages from codec
-  async _handleSignalingMessage(event) {
+  async _handleSignalingMessage(messageText) {
+    console.log(this.mode, "- handling signaling message:", messageText);
     let message;
+
     try {
-      message = JSON.parse(event.Text);
+      message = JSON.parse(messageText);
     } catch (e) {
-      console.warn("Invalid signaling message JSON:", event.Text);
+      console.warn("Invalid signaling message JSON:", messageText);
       return;
     }
 
-    if (message.mode == this.mode) {
+    if (!isSignalingMessage(message)) return;
+    if (!isSameApp(message.app, this.app)) return;
+
+    if (message.mode == this.mode || normalizeMode(message.mode) == this.role) {
       return;
     }
 
-    if(message.type == 'playerReady' && this.mode == 'controls'){
-        this._createPeerConnection();
-        return
+    if (message.type == "playerReady" && this.role == "controls") {
+      this._createPeerConnection();
+      return;
     }
 
     const index = message.connectionIndex;
@@ -153,7 +173,6 @@ export class MultiWebRTCDataConnection {
     const pc =
       this.peerConnections?.[index] ?? this._createPeerConnection(index);
 
-    
     if (message.type === "offer") {
       //console.log(pc);
 
@@ -167,13 +186,11 @@ export class MultiWebRTCDataConnection {
 
       //console.log("Sending Answer", pc.localDescription.sdp);
 
-      this.xapi.Command.Message.Send({
-        Text: JSON.stringify({
-          mode: this.mode,
-          type: "answer",
-          sdp: pc.localDescription.sdp,
-          connectionIndex: index,
-        }),
+      this._sendSignalingMessage({
+        mode: this.mode,
+        type: "answer",
+        sdp: pc.localDescription.sdp,
+        connectionIndex: index,
       });
     } else if (message.type === "answer") {
       await pc.setRemoteDescription(
@@ -191,11 +208,21 @@ export class MultiWebRTCDataConnection {
   /**
    * Send a message to all connected webviews via all WebRTC data channels.
    * @param {string} message - The message to send.
+   * @param {string} filter - The message to send.
    */
-  sendMessageToAll(message) {
+  sendMessageToAll(message, filter = []) {
+    filter = Array.isArray(filter) ? filter : [filter];
     for (const [index, dc] of Object.entries(this.dataChannels)) {
-      console.log("sending to index:", index, "message", message);
-      if (dc.readyState === "open") {
+      if (dc.readyState === "open" && !filter.includes(index)) {
+        console.log(
+          this.mode,
+          "sending to index:",
+          index,
+          "message",
+          message,
+          "filter",
+          filter,
+        );
         dc.send(JSON.stringify(message));
       }
     }
@@ -207,7 +234,6 @@ export class MultiWebRTCDataConnection {
    * @param {function} handler - Callback function to handle the event.
    */
   on(event, handler) {
-    console.log("adding event listner");
     if (this.eventHandlers[event]) {
       this.eventHandlers[event].push(handler);
     }
@@ -216,14 +242,24 @@ export class MultiWebRTCDataConnection {
   // Internal method to emit events to registered handlers
   _emitEvent(event, data) {
     if (this.eventHandlers[event]) {
-      console.log(
-        "emitting event:",
-        event,
-        data,
-        "handlers:",
-        this.eventHandlers[event]
-      );
       this.eventHandlers[event].forEach((handler) => handler(data));
     }
   }
+}
+
+function normalizeMode(mode) {
+  if (mode == "osd" || mode == "player") return "player";
+  if (mode == "controller" || mode == "controls") return "controls";
+  return mode;
+}
+
+function isSignalingMessage(message) {
+  return ["playerReady", "offer", "answer", "ice-candidate"].includes(
+    message?.type,
+  );
+}
+
+function isSameApp(messageApp, app) {
+  if (!app?.panelId) return true;
+  return messageApp?.panelId == app.panelId;
 }

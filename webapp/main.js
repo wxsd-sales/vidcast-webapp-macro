@@ -1,108 +1,49 @@
 import { PlayerController } from "./playerController.js";
 import { MultiWebRTCDataConnection } from "./webrtc.js";
+import { testPlaylist } from "./tests.js";
+import {
+  formatDuration,
+  setHash,
+  getHashes,
+  isTouchDevice,
+  formatDate,
+} from "./utils.js";
+
 // --- State Management ---
 let APP_STATE = {
   videos: [],
   current: null, // current video object
   state: "playlist", // or 'player' or 'controls'
-  mode: "player",
+  mode: "controls",
+  target: "Controller",
+  peripheralId: null,
+  interactive: false,
+  playback: {
+    playing: false,
+    paused: true,
+    ended: false,
+    currentTime: 0,
+    duration: 0,
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+  },
+  sharing: false,
 };
 
 let xapi;
 let multiConn;
 let player;
 let playerController;
-
+let suppressNextHashBroadcast = false;
 
 // --- Constants ---
 const LOGO_URL =
   "https://www.vidcast.io/wp-content/themes/cisco_vidcast/library/images/vidcast-logo--white.svg";
-
-// --- Utility ---
-function formatDuration(ms) {
-  const minsInMs = 60 * 1000;
-  const hourInMs = minsInMs * 60 * 1000;
-
-  const h = Math.floor(ms / hourInMs);
-  const m = Math.floor(ms / minsInMs);
-  const s = Math.floor((ms % minsInMs) / 1000);
-
-  if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s
-      .toString()
-      .padStart(2, "0")}`;
-  } else {
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  }
-}
-function formatDate(dateStr) {
-  // Expects ISO 8601 string
-  const date = new Date(parseInt(dateStr));
-  //console.log('Date:', date);
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const m = months[date.getMonth()];
-  const d = date.getDate();
-  let suffix = "th";
-  if (d % 10 === 1 && d !== 11) suffix = "st";
-  else if (d % 10 === 2 && d !== 12) suffix = "nd";
-  else if (d % 10 === 3 && d !== 13) suffix = "rd";
-  return `${m} ${d}${suffix}`;
-}
-
-// --- Mock fetch for videos (replace with your real fetch) ---
-async function fetchDemoVideos() {
-  // Replace this with: return fetch('YOUR_API_ENDPOINT').then(res => res.json());
-  await new Promise((res) => setTimeout(res, 400)); // simulate latency
-
-  return [
-    {
-      name: "Laptop vs Cisco Desk Device",
-      user_name: "Ryan Kaplan",
-      duration: "43840",
-      description:
-        "Show the best possible video experience compared to a standard laptop video experience.  (0:43)",
-      camera_thumbnail_asset_url:
-        "https://samplelib.com/lib/preview/jpeg/sample-clouds-400x300.jpg",
-      matrix_thumbnail_asset_url:
-        "https://cdn-3-d.app.vidcast.io/5b/52/dc/5b52dcb0-96d7-4309-a666-72907d17e743/thumbnail_matrix_1704920603331.jpeg?Expires=1766505481&Signature=lJTVlVu2K626d7N7d8ZZwb5dxAdah2Qi9eAZVHR~4wIhe03lADo13sVl10XZMvblIKBwbSEw0lNVxfI8HJLRGabHE0Ajd9I9nXTXsSCP4MjBXJFPVrWpTfjyqSNV8sBOTNHPz8u~2jOV456y6oxTGbYOMfoXS3Z9qiqMoiNn61d1fJcAnncDLAYxed4a94QWCywyP6JimaeUvkBpaSTqA2W51vPHZ-wXOzf1Su3ZR77~z1Ppb3lHpXnG2~TlHQ3ZyELc8X-Z0bM2BoC5cBddhxxb1cU8u2DYN4diUS91HrECayHgEZ9RhVOaMJ8F7eHpTcEBAyN3lZHx~wnZgZ521w__&Key-Pair-Id=K7MMR7AZ73QPM",
-      camera_asset_url: "https://samplelib.com/mp4/sample-5s.mp4",
-      preview_asset_url:
-        "https://cdn-3-e.app.vidcast.io/5b/52/dc/5b52dcb0-96d7-4309-a666-72907d17e743/preview_cb42795a-e769-441e-ac6f-eeeb21a752a5_processed.mp4?Expires=1766505481&Signature=QXymrK52ohe4YkseXIcH0LB-l4Opf~zMfPjLPaYsKqfL~TYxFAoKuOSvhD9AnMUsZLvSRTtUqV5FSJoY4IKxU~B5d-~TgLzD5ENSX1~iWaGtaUm8PrWPWYE3szBif6mGLU559v8Ya6Hvahojmwc83myw25CtTb4k~whY9MpJrMWl6J-1vPbR0a52jXKTl~WL~ann2QCdX1aUouoO5Go-2DdxxuCMZF8wpWZI6RbI80Wj29JbYczAbARR8xVOmSX11wx2n5In3fE6MvS5PsgakAjDtKxOdjg4HcBWFEQ26-nJPAUlaEpzdNZhkpf8cGASySYr~LOM5QrY~2ZqD0LcGA__&Key-Pair-Id=K7MMR7AZ73QPM",
-      avatar_url: "https://randomuser.me/api/portraits/men/11.jpg",
-      id: 1,
-    },
-
-    {
-      name: "Laptop vs Cisco Desk Device",
-      user_name: "Ryan Kaplan",
-      duration: "43840",
-      description:
-        "Show the best possible video experience compared to a standard laptop video experience.  (0:43)",
-      camera_thumbnail_asset_url:
-        "https://samplelib.com/lib/preview/jpeg/sample-clouds-400x300.jpg",
-      matrix_thumbnail_asset_url:
-        "https://cdn-3-d.app.vidcast.io/5b/52/dc/5b52dcb0-96d7-4309-a666-72907d17e743/thumbnail_matrix_1704920603331.jpeg?Expires=1766505481&Signature=lJTVlVu2K626d7N7d8ZZwb5dxAdah2Qi9eAZVHR~4wIhe03lADo13sVl10XZMvblIKBwbSEw0lNVxfI8HJLRGabHE0Ajd9I9nXTXsSCP4MjBXJFPVrWpTfjyqSNV8sBOTNHPz8u~2jOV456y6oxTGbYOMfoXS3Z9qiqMoiNn61d1fJcAnncDLAYxed4a94QWCywyP6JimaeUvkBpaSTqA2W51vPHZ-wXOzf1Su3ZR77~z1Ppb3lHpXnG2~TlHQ3ZyELc8X-Z0bM2BoC5cBddhxxb1cU8u2DYN4diUS91HrECayHgEZ9RhVOaMJ8F7eHpTcEBAyN3lZHx~wnZgZ521w__&Key-Pair-Id=K7MMR7AZ73QPM",
-      camera_asset_url: "https://samplelib.com/mp4/sample-5s.mp4",
-      preview_asset_url:
-        "https://cdn-3-e.app.vidcast.io/5b/52/dc/5b52dcb0-96d7-4309-a666-72907d17e743/preview_cb42795a-e769-441e-ac6f-eeeb21a752a5_processed.mp4?Expires=1766505481&Signature=QXymrK52ohe4YkseXIcH0LB-l4Opf~zMfPjLPaYsKqfL~TYxFAoKuOSvhD9AnMUsZLvSRTtUqV5FSJoY4IKxU~B5d-~TgLzD5ENSX1~iWaGtaUm8PrWPWYE3szBif6mGLU559v8Ya6Hvahojmwc83myw25CtTb4k~whY9MpJrMWl6J-1vPbR0a52jXKTl~WL~ann2QCdX1aUouoO5Go-2DdxxuCMZF8wpWZI6RbI80Wj29JbYczAbARR8xVOmSX11wx2n5In3fE6MvS5PsgakAjDtKxOdjg4HcBWFEQ26-nJPAUlaEpzdNZhkpf8cGASySYr~LOM5QrY~2ZqD0LcGA__&Key-Pair-Id=K7MMR7AZ73QPM",
-      avatar_url: "https://randomuser.me/api/portraits/men/11.jpg",
-      id: 20,
-    },
-  ];
-}
+const PLAYLIST_MESSAGE_NAME = "playlist";
+const PLAYLIST_REQUEST_TIMEOUT = 8000;
+const PLAY_ICON = "&#9658;";
+const PAUSE_ICON = "&#10073;&#10073;";
 
 async function connectDevice(jsxapi, { username, password, ipAddress }) {
   console.log("Connecting to:", ipAddress);
@@ -114,15 +55,179 @@ async function connectDevice(jsxapi, { username, password, ipAddress }) {
   });
 }
 
-function setHash(params, notify = true) {
-  const current = getHashes();
-  for (const key in params) {
-    if (params.hasOwnProperty(key)) {
-      current[key] = params[key];
-    }
+function createRequestId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getMessageApp({ panelId, username, target, peripheralId }) {
+  const app = {
+    panelId: panelId ?? username,
+  };
+
+  if (peripheralId) app.PeripheralId = peripheralId;
+  else app.Target = target ?? "OSD";
+
+  return app;
+}
+
+function isTruthy(value) {
+  return value === true || value === "true";
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function getVideoDurationSeconds(video = APP_STATE.current) {
+  const durationMs = toFiniteNumber(video?.duration, 0);
+  return durationMs > 0 ? durationMs / 1000 : 0;
+}
+
+function clampPlaybackTime(time, duration = getVideoDurationSeconds()) {
+  const currentTime = Math.max(0, toFiniteNumber(time, 0));
+  return duration > 0 ? Math.min(currentTime, duration) : currentTime;
+}
+
+function formatPlaybackTime(seconds) {
+  return formatDuration(Math.round(toFiniteNumber(seconds, 0) * 1000));
+}
+
+function normalizePlaybackState(snapshot = {}) {
+  const fallbackDuration = getVideoDurationSeconds();
+  const snapshotDuration = toFiniteNumber(snapshot.duration, fallbackDuration);
+  const duration = snapshotDuration > 0 ? snapshotDuration : fallbackDuration;
+  const ended = Boolean(snapshot.ended);
+
+  let paused =
+    "paused" in snapshot
+      ? Boolean(snapshot.paused)
+      : !(APP_STATE.playback?.playing ?? false);
+  let playing =
+    "playing" in snapshot ? Boolean(snapshot.playing) : !paused && !ended;
+
+  if (ended) {
+    playing = false;
+    paused = true;
+  } else if (playing) {
+    paused = false;
+  } else {
+    paused = true;
   }
-  if (notify) multiConn.sendMessageToAll({ hash: current });
-  window.location.hash = btoa(JSON.stringify(current));
+
+  return {
+    ...APP_STATE.playback,
+    ...snapshot,
+    currentTime: clampPlaybackTime(
+      snapshot.currentTime ?? APP_STATE.playback.currentTime,
+      duration,
+    ),
+    duration,
+    ended,
+    paused,
+    playing,
+  };
+}
+
+function resetPlaybackState() {
+  APP_STATE.playback = normalizePlaybackState({
+    playing: false,
+    paused: true,
+    ended: false,
+    currentTime: 0,
+    duration: getVideoDurationSeconds(),
+  });
+}
+
+function setPlaybackState(snapshot = {}) {
+  APP_STATE.playback = normalizePlaybackState(snapshot);
+  updateControlsPlaybackUi();
+  updatePlayerPlaybackUi();
+}
+
+function setShareState(sharing) {
+  APP_STATE.sharing = Boolean(sharing);
+  updateShareUi();
+}
+
+function updateControlsPlaybackUi() {
+  if (APP_STATE.mode !== "controls" || !APP_STATE.current) return;
+
+  const duration = APP_STATE.playback.duration || getVideoDurationSeconds();
+  const currentTime = clampPlaybackTime(APP_STATE.playback.currentTime, duration);
+  const slider = document.getElementById("slider");
+  const timeLabel = document.getElementById("time-label");
+  const playPause = document.getElementById("btn-playpause");
+
+  if (slider) {
+    slider.max = String(duration);
+    slider.value = String(currentTime);
+  }
+
+  if (timeLabel) {
+    timeLabel.textContent = `${formatPlaybackTime(
+      currentTime,
+    )} / ${formatPlaybackTime(duration)}`;
+  }
+
+  if (playPause) {
+    playPause.innerHTML = APP_STATE.playback.playing ? PAUSE_ICON : PLAY_ICON;
+  }
+}
+
+function updatePlayerPlaybackUi(playerElement = player) {
+  if (APP_STATE.mode !== "player" || !APP_STATE.current) return;
+
+  const container = document.querySelector(".player-container");
+  if (!container) return;
+
+  const playing = playerElement
+    ? !playerElement.paused && !playerElement.ended
+    : APP_STATE.playback.playing;
+
+  container.classList.toggle("is-playing", playing);
+}
+
+function updateShareUi() {
+  document
+    .querySelector(".player-container")
+    ?.classList.toggle("is-sharing", APP_STATE.sharing);
+
+  const shareButton = document.getElementById("btn-share");
+  if (!shareButton) return;
+
+  shareButton.classList.toggle("is-sharing", APP_STATE.sharing);
+  shareButton.setAttribute("aria-pressed", String(APP_STATE.sharing));
+  shareButton.innerHTML = `<span class="share-icon"></span> ${
+    APP_STATE.sharing ? "Stop Share" : "Share"
+  }`;
+}
+
+function localizeHashForSurface(hash = {}) {
+  const localHash = {
+    ...hash,
+    mode: APP_STATE.mode,
+    target: APP_STATE.target,
+  };
+
+  if (APP_STATE.peripheralId) localHash.peripheralId = APP_STATE.peripheralId;
+  else delete localHash.peripheralId;
+
+  if (APP_STATE.interactive) localHash.interactive = true;
+  else delete localHash.interactive;
+
+  return localHash;
+}
+
+function setRemoteHash(hash) {
+  const previousHash = window.location.hash;
+  suppressNextHashBroadcast = true;
+  setHash(hash);
+
+  if (window.location.hash == previousHash) {
+    suppressNextHashBroadcast = false;
+  }
 }
 
 // --- Render Functions ---
@@ -141,17 +246,6 @@ function renderHeader(state) {
 }
 
 function renderPlaylistGrid(videos) {
-    const player = document.getElementById("player-video");
-    if(player && typeof player.pause === 'function'){
-        player.pause();
-        player.remove();
-
-         if (player.parentNode) {
-      player.parentNode.removeChild(player);
-      console.log(`Video with ID "${videoId}" removed from the DOM.`);
-    }
-    }
-    playerController = null;
   return `
             <div class="playlist-grid">
             ${videos
@@ -163,26 +257,26 @@ function renderPlaylistGrid(videos) {
                     video.camera_thumbnail_asset_url
                   }" alt="Video preview">
                   <span class="duration-overlay">${formatDuration(
-                    video.duration
+                    video.duration,
                   )}</span>
                 </div>
                 <div class="card-info">
                   <img class="avatar" src="${video.avatar_url}" alt="${
-                  video.user_name
-                }">
+                    video.user_name
+                  }">
                   <div class="text-info">
                     <div class="video-name" title="${video.name}">${
-                  video.name.length > 44
-                    ? video.name.slice(0, 41) + "..."
-                    : video.name
-                }</div>
+                      video.name.length > 44
+                        ? video.name.slice(0, 41) + "..."
+                        : video.name
+                    }</div>
                     <div class="creator-info">${
                       video.user_name
                     } &middot; ${formatDate(video.created)}</div>
                   </div>
                 </div>
               </div>
-            `
+            `,
               )
               .join("")}
             </div>
@@ -190,23 +284,30 @@ function renderPlaylistGrid(videos) {
 }
 
 function renderPlayerState(video) {
-  const library = !isTouchDevice()
+  const library = !isInteractiveSurface()
     ? ""
-    : '<button class="controls-library" id="btn-library"><span class="library-icon"></span> Library</button>';
+    : '<button class="controls-library player-library-button" id="btn-library"><span class="library-icon"></span> Library</button>';
+  const controls = isInteractiveSurface() ? "controls" : "";
   return `
             <div class="player-container">
               <div class="player-video-wrapper">
-                <video class="player-video" id="player-video" src="${video.camera_asset_url}" controls  poster="${video.camera_thumbnail_asset_url}"></video>
+                <video class="player-video" id="player-video" src="${video.camera_asset_url}" ${controls} poster="${video.camera_thumbnail_asset_url}"></video>
                 <div class="player-logo-header">
                   <img src="${LOGO_URL}" alt="Logo" class="logo">
-                  ${library}
                 </div>
+                ${library}
               </div>
             </div>
           `;
 }
 
 function renderControlsState(video) {
+  const duration = APP_STATE.playback.duration || getVideoDurationSeconds(video);
+  const currentTime = clampPlaybackTime(APP_STATE.playback.currentTime, duration);
+  const playPauseIcon = APP_STATE.playback.playing ? PAUSE_ICON : PLAY_ICON;
+  const shareClass = APP_STATE.sharing ? " is-sharing" : "";
+  const shareLabel = APP_STATE.sharing ? "Stop Share" : "Share";
+
   return `
             <div class="controls-container">
               <div class="controls-video-card">
@@ -215,8 +316,8 @@ function renderControlsState(video) {
                 }" alt="Video preview" class="controls-thumb">
                 <div class="controls-info">
                   <div class="controls-video-name" title="${video.name}">${
-    video.name
-  }</div>
+                    video.name
+                  }</div>
   <div class="controls-video-description">${video.description}</div>
                   <div class="controls-creator">
                     <img class="controls-avatar" src="${
@@ -224,28 +325,45 @@ function renderControlsState(video) {
                     }" alt="${video.user_name}">
                     <span>${video.user_name}</span>
                     <span class="controls-date">${formatDate(
-                      video.created
+                      video.created,
                     )}</span>
                   </div>
                 </div>
               </div>
               <div class="controls-bar">
-                    <input type="range" class="controls-slider" id="slider" min="0" max="${
-                      video.duration / 1000
-                    }" value="0" step="1">
+                    <input type="range" class="controls-slider" id="slider" min="0" max="${duration}" value="${currentTime}" step="0.1">
               </div>
               <div class="controls-bar">
                 <button class="controls-btn controls-btn-rotate" id="btn-backward" title="Back 10s">&#x21BA;</button>
-                <button class="controls-btn" id="btn-playpause" title="Play/Pause">&#9658;</button>
+                <button class="controls-btn" id="btn-playpause" title="Play/Pause">${playPauseIcon}</button>
                 
                 <button class="controls-btn controls-btn-rotate" id="btn-forward" title="Forward 10s">&#x21BB;</button>
-                <span class="controls-time" id="time-label">0:00 / ${formatDuration(
-                  video.duration
-                )}</span>
-                <button class="controls-share" id="btn-share"><span class="share-icon"></span> Share</button>
+                <span class="controls-time" id="time-label">${formatPlaybackTime(
+                  currentTime,
+                )} / ${formatPlaybackTime(duration)}</span>
+                <button class="controls-share${shareClass}" id="btn-share" aria-pressed="${APP_STATE.sharing}"><span class="share-icon"></span> ${shareLabel}</button>
               </div>
             </div>
           `;
+}
+
+function renderWaitingState() {
+  return `
+            <div class="waiting-screen">
+              <img src="${LOGO_URL}" alt="Logo" class="waiting-logo">
+              <div class="waiting-message">Select a Vidcast on the controller</div>
+            </div>
+          `;
+}
+
+function isInteractiveSurface() {
+  return (
+    APP_STATE.mode === "controls" ||
+    APP_STATE.interactive ||
+    APP_STATE.target === "Controller" ||
+    APP_STATE.peripheralId ||
+    isTouchDevice()
+  );
 }
 
 // --- Main Render ---
@@ -253,13 +371,36 @@ function render() {
   const app = document.getElementById("app");
   console.log("Rendering - state:", APP_STATE.state, "mode:", APP_STATE.mode);
 
+  while (app.firstChild) {
+    console.log("Removing child");
+    app.removeChild(app.firstChild);
+  }
+
+  const playerVideo = document.getElementById("player-video");
+
+  if (playerVideo) {
+    console.warn("removing player video");
+    playerVideo.pause();
+    playerVideo.removeAttribute("src"); // video.src = '' works so this line can be deleted
+    playerVideo.load();
+    playerVideo.src = "";
+    playerVideo.srcObject = null;
+    playerVideo.remove();
+  }
+
   if (APP_STATE.state === "playlist") {
     APP_STATE.current = null;
+    if (!isInteractiveSurface()) {
+      app.innerHTML = renderWaitingState();
+      setupEventHandlers();
+      return;
+    }
     app.innerHTML =
       renderHeader(APP_STATE.videos) + renderPlaylistGrid(APP_STATE.videos);
     setupEventHandlers();
     return;
   }
+
   if (APP_STATE.mode === "player" && APP_STATE.current) {
     app.innerHTML = renderPlayerState(APP_STATE.current);
   } else if (APP_STATE.mode === "controls" && APP_STATE.current) {
@@ -279,72 +420,60 @@ function setupEventHandlers() {
     document.querySelectorAll(".video-card").forEach((card) => {
       card.addEventListener("click", (e) => {
         const id = card.getAttribute("data-video-id");
+        console.log("card clicked id:", id);
         const vid = APP_STATE.videos.find((v) => v.id === id);
+        console.log("Vid:", vid);
         if (!vid) return;
         // Check URL hash for mode
         // set hash accordingly
         setHash({ state: "player", id: vid.id });
       });
     });
+    return;
   }
   // Controls state: playback controls
   if (APP_STATE.mode === "controls" && APP_STATE.current) {
-    let playing = false;
-    let currentTime = 0;
-    const duration = APP_STATE.current.duration;
-    // Play/Pause button
-    document.getElementById("btn-playpause").addEventListener("click", () => {
-      playing = !playing;
-      document.getElementById("btn-playpause").innerHTML = playing
-        ? "&#10073;&#10073;"
-        : "&#9658;";
-      // API call for play/pause
+    const slider = document.getElementById("slider");
 
-      multiConn.sendMessageToAll({
+    function seekTo(time) {
+      const duration = APP_STATE.playback.duration || getVideoDurationSeconds();
+      const currentTime = clampPlaybackTime(time, duration);
+      setPlaybackState({ currentTime, ended: false });
+      multiConn?.sendMessageToAll({
+        control: { type: "seek", time: currentTime },
+      });
+    }
+
+    document.getElementById("btn-playpause").addEventListener("click", () => {
+      const playing = !APP_STATE.playback.playing;
+      setPlaybackState({ playing, paused: !playing, ended: false });
+      multiConn?.sendMessageToAll({
         control: { type: playing ? "play" : "pause" },
       });
     });
-    // Seek bar
-    const slider = document.getElementById("slider");
-    const timeLabel = document.getElementById("time-label");
-    slider.addEventListener("input", () => {
-      currentTime = parseInt(slider.value, 10);
-      updateTimeLabel();
-      multiConn.sendMessageToAll({
-        control: { type: "seek", time: currentTime },
-      })
-    });
-    function updateTimeLabel() {
-      timeLabel.textContent = `${formatDuration(
-        currentTime
-      )} / ${formatDuration(duration)}`;
-    }
-    updateTimeLabel();
-    // Backward/Forward
-    document.getElementById("btn-backward").addEventListener("click", () => {
-      currentTime = Math.max(0, currentTime - 10);
-      slider.value = currentTime;
-      updateTimeLabel();
-      multiConn.sendMessageToAll({
-        control: { type: "seek", time: currentTime },
-      });
-    });
-    document.getElementById("btn-forward").addEventListener("click", () => {
-      currentTime = Math.min(duration, currentTime + 10);
-      slider.value = currentTime;
 
-      updateTimeLabel();
-      multiConn.sendMessageToAll({
-        control: { type: "seek", time: currentTime },
-      });
+    slider.addEventListener("input", () => {
+      seekTo(slider.value);
     });
+
+    document.getElementById("btn-backward").addEventListener("click", () => {
+      seekTo(APP_STATE.playback.currentTime - 10);
+    });
+
+    document.getElementById("btn-forward").addEventListener("click", () => {
+      seekTo(APP_STATE.playback.currentTime + 10);
+    });
+
+    updateControlsPlaybackUi();
+    updateShareUi();
+
     // Share in Call
     document.getElementById("btn-share").addEventListener("click", () => {
-      alert(
-        'Share in call triggered for "' +
-          APP_STATE.current.name +
-          '" (mocked action).'
-      );
+      const sharing = !APP_STATE.sharing;
+      setShareState(sharing);
+      multiConn?.sendMessageToAll({
+        share: { active: sharing },
+      });
     });
     // Return to library
     document.getElementById("btn-library").addEventListener("click", () => {
@@ -354,15 +483,27 @@ function setupEventHandlers() {
   }
 
   if (APP_STATE.mode === "player" && APP_STATE.current) {
+    console.log("Setting up listner for player");
+
     document.getElementById("btn-library")?.addEventListener("click", () => {
       console.log("returning to library");
       setHash({ state: "playlist", id: null });
     });
 
-    
     player = document.getElementById("player-video");
+    console.log("typeof player:", typeof player);
 
-    playerController.controlPlayer(player);
+    ["loadedmetadata", "play", "playing", "pause", "ended"].forEach(
+      (eventType) => {
+        player.addEventListener(eventType, () => {
+          updatePlayerPlaybackUi(player);
+        });
+      },
+    );
+    updatePlayerPlaybackUi(player);
+    updateShareUi();
+
+    if (playerController) playerController.controlPlayer(player);
   }
 }
 
@@ -370,14 +511,23 @@ function setupEventHandlers() {
 window.addEventListener("hashchange", () => {
   updateStateFromHash();
   render();
-  multiConn.sendMessageToAll(JSON.stringify({ hash: getHashes() }));
+  const shouldBroadcast = !suppressNextHashBroadcast;
+  suppressNextHashBroadcast = false;
+  if (shouldBroadcast && multiConn) {
+    multiConn.sendMessageToAll({ hash: getHashes() });
+  }
 });
 
 function updateStateFromHash() {
-  const params = getHashes();
-  console.log("updating state from hash");
-  console.log(params);
+  const params = getHashes() ?? {};
+  const previousVideoId = APP_STATE.current?.id ?? null;
+  console.log(APP_STATE.mode, "updating state from hash");
   console.log(APP_STATE);
+
+  if (params.mode) APP_STATE.mode = params.mode;
+  if (params.target) APP_STATE.target = params.target;
+  APP_STATE.peripheralId = params.peripheralId ?? null;
+  APP_STATE.interactive = isTruthy(params.interactive);
 
   if (params.mode === "player" && params.id) {
     APP_STATE.state = "player";
@@ -392,57 +542,103 @@ function updateStateFromHash() {
     APP_STATE.state = "playlist";
     APP_STATE.current = null;
   }
+
+  const nextVideoId = APP_STATE.current?.id ?? null;
+  if (nextVideoId !== previousVideoId || !nextVideoId) {
+    resetPlaybackState();
+    setShareState(false);
+  }
+
   console.log(APP_STATE);
 }
 
-function isTouchDevice() {
-  return (
-    "ontouchstart" in window ||
-    navigator.maxTouchPoints > 0 ||
-    navigator.msMaxTouchPoints > 0
-  );
+async function getPlaylist(xapi, app) {
+  if (xapi == null || !app?.panelId) return [];
+
+  const requestId = createRequestId();
+  const chunks = [];
+  let count = 0;
+
+  return new Promise((resolve, reject) => {
+    let unsubscribe;
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for Vidcast playlist"));
+    }, PLAYLIST_REQUEST_TIMEOUT);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      if (typeof unsubscribe == "function") unsubscribe();
+    }
+
+    unsubscribe = xapi.Event.Message.Send.on(({ Text }) => {
+      const packet = safeParse(Text);
+      if (!isPlaylistPacket(packet, requestId, app)) return;
+
+      if (packet.type == "error") {
+        cleanup();
+        reject(new Error(packet.message || "Unable to get Vidcast playlist"));
+        return;
+      }
+
+      if (packet.type != "response") return;
+      const { index, total, content } = packet;
+      if (!isValidPacket(index, total, content)) return;
+
+      if (chunks[index] === undefined) count += 1;
+      chunks[index] = content;
+
+      if (count == total) {
+        cleanup();
+        const playlist = safeParse(chunks.join(""));
+        resolve(Array.isArray(playlist) ? playlist : []);
+      }
+    });
+
+    Promise.resolve(
+      xapi.Command.Message.Send({
+        Text: JSON.stringify({
+          type: "request",
+          name: PLAYLIST_MESSAGE_NAME,
+          requestId,
+          app,
+        }),
+      }),
+    ).catch((error) => {
+      cleanup();
+      reject(error);
+    });
+  });
 }
 
-function getHashes(required) {
-  if (!location.hash) return;
-  const hashString = location.hash.split("#").slice(1).join();
+function safeParse(text) {
   try {
-    const hashes = JSON.parse(atob(hashString));
-    console.log(hashes);
-
-    if (typeof required === "undefined") return hashes;
-    if (required.every((key) => Object.keys(hashes).includes(key))) {
-      console.log("All required parameters found");
-      return hashes;
-    }
-    console.log("Missing Parameters");
+    return JSON.parse(text);
   } catch (error) {
     return;
   }
 }
 
-async function getPlaylist(panelId) {
-  if (xapi == null) return;
-  const extensions = await xapi.Command.UserInterface.Extensions.List({
-    ActivityType: "Custom",
-  });
-  const panels = extensions?.Extensions?.Panel;
-  if (!panels) return;
-  const channelPanel = panels.find(
-    (panel) => panel.PanelId == panelId + "playlist"
+function isPlaylistPacket(packet, requestId, app) {
+  return (
+    packet?.name == PLAYLIST_MESSAGE_NAME &&
+    packet?.requestId == requestId &&
+    packet?.app?.panelId == app.panelId
   );
+}
 
-  const widgets = channelPanel?.Page?.[0]?.Row?.[0]?.Widget;
-  if (!widgets) return;
-
-  const recoveredPlaylist = widgets.map((widget, index) => {
-    const values = widget?.ValueSpace?.Value;
-    return values.reduce(
-      (obj, item) => Object.assign(obj, { [atob(item.Name)]: atob(item.Key) }),
-      {}
-    );
-  });
-  return recoveredPlaylist;
+function isValidPacket(index, total, content) {
+  return (
+    index === +index &&
+    total === +total &&
+    index % 1 == 0 &&
+    total % 1 == 0 &&
+    index >= 0 &&
+    total > 0 &&
+    index < total &&
+    total <= 1000 &&
+    typeof content == "string"
+  );
 }
 
 // --- Initial Load ---
@@ -450,46 +646,93 @@ async function main() {
   const hashes = getHashes(["username", "password", "ipAddress", "mode"]);
 
   if (!hashes) {
+    const demoHashes = getHashes(["mode"]) ?? {};
     console.log("Required Hashes Not Found");
-    APP_STATE.videos = await fetchDemoVideos();
+    APP_STATE.videos = testPlaylist;
+
+    APP_STATE.mode = demoHashes.mode ?? APP_STATE.mode;
+    APP_STATE.target = demoHashes.target ?? APP_STATE.target;
+    APP_STATE.peripheralId = demoHashes.peripheralId ?? null;
+    APP_STATE.interactive = isTruthy(demoHashes.interactive);
+    console.log("setting demo mode:", APP_STATE.mode);
+    console.log(APP_STATE.mode, testPlaylist);
+    setHash({ mode: APP_STATE.mode, state: "playlist", id: null });
+    const app = demoHashes.panelId ? getMessageApp(demoHashes) : undefined;
+    multiConn = new MultiWebRTCDataConnection(undefined, APP_STATE.mode, app);
+  } else {
+    try {
+      xapi = await connectDevice(jsxapi, hashes);
+      console.log("Connected");
+      const app = getMessageApp(hashes);
+      APP_STATE.videos = await getPlaylist(xapi, app);
+      APP_STATE.mode = hashes.mode;
+      APP_STATE.target = hashes.target ?? APP_STATE.target;
+      APP_STATE.peripheralId = hashes.peripheralId ?? null;
+      APP_STATE.interactive = isTruthy(hashes.interactive);
+      console.log("app state", APP_STATE);
+      multiConn = new MultiWebRTCDataConnection(xapi, APP_STATE.mode, app);
+      // Send a message to all connected webviews
+    } catch (err) {
+      console.warn("Unable to connect to device:", hashes.ipAddress);
+      console.warn(err);
+      APP_STATE.videos = testPlaylist;
+    }
   }
 
-  try {
-    xapi = await connectDevice(jsxapi, hashes);
-    console.log("Connected");
-    const playlist = await getPlaylist(hashes.username);
-    console.log(playlist);
-    APP_STATE.videos = playlist;
-    APP_STATE.mode = hashes.mode;
-    console.log("app state", APP_STATE);
+  if (!multiConn) {
+    multiConn = new MultiWebRTCDataConnection(undefined, APP_STATE.mode);
+  }
 
-    multiConn = new MultiWebRTCDataConnection(xapi, APP_STATE.mode);
+  multiConn.on("open", ({ connectionIndex }) => {
+    console.log(`Data channel ${connectionIndex} is open`);
+    if (APP_STATE.mode == "player") {
+      if (!playerController) playerController = new PlayerController(multiConn);
+      if (player) playerController.controlPlayer(player);
+      playerController?.sendCurrentState("connection-open");
+    }
+  });
 
-    console.log("multiConn", typeof multiConn);
-    multiConn.on("open", ({ connectionIndex }) => {
-      console.log(`Data channel ${connectionIndex} is open`);
-      playerController = new PlayerController(multiConn);
-      if(player)playerController.controlPlayer(player);
-    });
+  multiConn.on("message", ({ connectionIndex, data }) => {
+    console.log(
+      APP_STATE.mode,
+      `Received Data Channel Message from: ${connectionIndex}:`,
+      data,
+    );
+    if (data == undefined) return;
+    let message;
+    try {
+      message = JSON.parse(data);
+    } catch (error) {
+      console.warn("Invalid data channel message JSON:", data);
+      return;
+    }
 
-    multiConn.on("message", ({ connectionIndex, data }) => {
-      console.log(`Received message on data channel ${connectionIndex}:`, data);
-      if (data == undefined) return;
+    const { hash, player, share } = message;
+    if (hash) {
+      const localHash = localizeHashForSurface(hash);
+      setRemoteHash(localHash);
 
-      const { hash, action, player } = JSON.parse(data);
-      if (hash) {
-        hash.mode = APP_STATE.mode;
-        setHash(hash, false);
-        return;
+      if (APP_STATE.mode == "player") {
+        console.warn("Replaying hash update");
+        multiConn.sendMessageToAll({ hash: localHash }, [connectionIndex]);
       }
-    });
+      return;
+    }
 
-    // Send a message to all connected webviews
-  } catch (err) {
-    console.warn("Unable to connect to device:", hashes.ipAddress);
-    console.warn(err);
-    //APP_STATE.videos = await fetchDemoVideos();
-  }
+    if (player) {
+      setPlaybackState(player);
+      return;
+    }
+
+    if (share) {
+      setShareState(share.active);
+
+      if (APP_STATE.mode == "player") {
+        multiConn.sendMessageToAll({ share: { active: APP_STATE.sharing } });
+      }
+      return;
+    }
+  });
 
   updateStateFromHash();
   render();

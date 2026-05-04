@@ -1,0 +1,37 @@
+{
+  "name": "vidcast-webapp-macro",
+  "version": "1.0.0",
+  "description": "This is an example macro which demonstrates how to open and control playback of Vidcast videos from a paired Room Navigator.",
+  "type": "module",
+  "scripts": {
+    "serve:web": "node scripts/serve-web.mjs",
+    "screenshot:web": "node scripts/screenshot-web.mjs",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watchAll --runInBand"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wxsd-sales/vidcast-webapp-macro.git"
+  },
+  "keywords": [
+    "macros",
+    "roomos",
+    "vidcast"
+  ],
+  "author": "William Mills",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wxsd-sales/vidcast-webapp-macro/issues"
+  },
+  "homepage": "https://github.com/wxsd-sales/vidcast-webapp-macro#readme",
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "jest-mock-xapi": "^1.0.5"
+  },
+    "jest": {
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^xapi$": "jest-mock-xapi"
+    }
+  }
+}

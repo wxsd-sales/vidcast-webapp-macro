@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vidcast Web App Macro Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --device-frame: #595959;
+        --page-bg: #14161a;
+        --header-bg: #20242a;
+        --header-border: #333941;
+        --control-bg: #2d333b;
+        --control-border: #4a525d;
+        --control-text: #f4f7fb;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100%;
+        overflow: hidden;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: var(--page-bg);
+        color: var(--control-text);
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .demo-header {
+        min-height: 64px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 12px 20px;
+        background: var(--header-bg);
+        border-bottom: 1px solid var(--header-border);
+      }
+
+      .demo-header h1 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .demo-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .demo-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: rgba(244, 247, 251, 0.82);
+      }
+
+      .demo-control button,
+      .demo-control select {
+        min-height: 36px;
+        border: 1px solid var(--control-border);
+        border-radius: 6px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        font: inherit;
+      }
+
+      .demo-control button {
+        min-width: 132px;
+        padding: 0 14px;
+        cursor: pointer;
+      }
+
+      .demo-control button[aria-pressed="true"] {
+        border-color: #68d391;
+        background: #244333;
+      }
+
+      .demo-control select {
+        padding: 0 28px 0 10px;
+      }
+
+      .surfaces {
+        height: calc(100vh - 64px);
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #osd,
+      #controller {
+        min-height: 0;
+        display: flex;
+        justify-content: center;
+      }
+
+      #osd {
+        flex: 1;
+      }
+
+      #controller {
+        flex: 1;
+        flex-direction: row;
+      }
+
+      #controller:empty {
+        display: none;
+      }
+
+      .iframe-wrapper {
+        flex: 0 1 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        box-sizing: border-box;
+        margin: 10px;
+        min-width: 0;
+        width: min(calc(((100vh - 64px) / 2 - 20px) * (16 / 9)), calc(100vw - 20px));
+        aspect-ratio: 16 / 9;
+        background-color: var(--device-frame);
+      }
+
+      #controller .iframe-wrapper {
+        width: min(
+          calc(((100vh - 64px) / 2 - 20px) * (16 / 9)),
+          calc((100vw - (20px * var(--controller-count))) / var(--controller-count))
+        );
+      }
+
+      .iframe-wrapper iframe {
+        display: block;
+        height: 100%;
+        width: 100%;
+        zoom: calc((100vh - 64px) / 1920px);
+        background-color: black;
+        border: none;
+      }
+
+      .iframe-wrapper.osd {
+        border-width: calc(20px * (100vh / 1920px));
+        border-style: solid;
+        border-color: var(--device-frame);
+      }
+
+      .iframe-wrapper.controller {
+        display: flex;
+        flex-direction: row;
+        border-radius: calc(50px * (100vh / 1920px));
+        border-width: calc(50px * (100vh / 1920px));
+        border-style: solid;
+        border-color: var(--device-frame);
+      }
+
+      .iframe-wrapper.controller iframe {
+        border-radius: calc(50px * (100vh / 1920px));
+      }
+
+      @media (max-width: 900px) {
+        html,
+        body {
+          overflow: auto;
+        }
+
+        .demo-header {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .demo-controls {
+          justify-content: flex-start;
+        }
+
+        .surfaces {
+          height: auto;
+          min-height: calc(100vh - 113px);
+        }
+
+        #controller {
+          flex-direction: column;
+        }
+
+        .iframe-wrapper {
+          min-width: 0;
+          max-width: none;
+          width: calc(100vw - 20px);
+          aspect-ratio: 16 / 9;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="demo-header">
+      <h1>Vidcast Web App Macro Demo</h1>
+      <div class="demo-controls">
+        <label class="demo-control">
+          <span>OSD</span>
+          <button id="osd-interactive" type="button" aria-pressed="false">
+            Non Interactive
+          </button>
+        </label>
+        <label class="demo-control">
+          <span>Controllers</span>
+          <select id="controller-count">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <main class="surfaces">
+      <div id="osd"></div>
+      <div id="controller"></div>
+    </main>
+
+    <script>
+      const PANEL_ID = "vidcast";
+      const INDEX_URL = "index.html";
+
+      const state = {
+        osdInteractive: false,
+        controllerCount: 2,
+      };
+
+      function encodeLaunchHash(payload) {
+        return "#" + btoa(JSON.stringify(payload));
+      }
+
+      function getOsdPayload() {
+        return {
+          mode: "player",
+          panelId: PANEL_ID,
+          target: "OSD",
+          interactive: state.osdInteractive,
+        };
+      }
+
+      function getControllerPayload(index) {
+        return {
+          mode: "controls",
+          panelId: PANEL_ID,
+          target: "Controller",
+          peripheralId: `controller-${index + 1}`,
+        };
+      }
+
+      function createFrame(surface, payload, title) {
+        const frameWrapper = document.createElement("div");
+        frameWrapper.classList.add("iframe-wrapper", surface);
+
+        const iframe = document.createElement("iframe");
+        iframe.title = title;
+        iframe.src = INDEX_URL + encodeLaunchHash(payload);
+
+        frameWrapper.appendChild(iframe);
+        return frameWrapper;
+      }
+
+      function renderDemo() {
+        const osd = document.getElementById("osd");
+        const controller = document.getElementById("controller");
+        osd.replaceChildren();
+        controller.replaceChildren();
+        controller.style.setProperty(
+          "--controller-count",
+          String(Math.max(state.controllerCount, 1)),
+        );
+
+        osd.appendChild(createFrame("osd", getOsdPayload(), "OSD"));
+
+        for (let i = 0; i < state.controllerCount; i += 1) {
+          controller.appendChild(
+            createFrame(
+              "controller",
+              getControllerPayload(i),
+              `Controller ${i + 1}`,
+            ),
+          );
+        }
+      }
+
+      function syncControls() {
+        const osdToggle = document.getElementById("osd-interactive");
+        osdToggle.textContent = state.osdInteractive
+          ? "Interactive"
+          : "Non Interactive";
+        osdToggle.setAttribute("aria-pressed", String(state.osdInteractive));
+        document.getElementById("controller-count").value = String(
+          state.controllerCount,
+        );
+      }
+
+      function init() {
+        const osdToggle = document.getElementById("osd-interactive");
+        const controllerCount = document.getElementById("controller-count");
+
+        osdToggle.addEventListener("click", () => {
+          state.osdInteractive = !state.osdInteractive;
+          syncControls();
+          renderDemo();
+        });
+
+        controllerCount.addEventListener("change", (event) => {
+          state.controllerCount = Number(event.target.value);
+          renderDemo();
+        });
+
+        syncControls();
+        renderDemo();
+      }
+
+      init();
+    </script>
+  </body>
+</html>

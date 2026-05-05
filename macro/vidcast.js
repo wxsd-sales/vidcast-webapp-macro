@@ -33,12 +33,25 @@ const config = {
   panelId: "vidcast",
 };
 
+
+
 /*********************************************************
  * Do not change below
  **********************************************************/
 
 const PLAYLIST_MESSAGE_NAME = "playlist";
-const MAX_MESSAGE_TEXT_LENGTH = 8192;
+const MAX_MESSAGE_TEXT_BYTES = 8192;
+const VIDCAST_VIDEO_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "created",
+  "user_name",
+  "duration",
+  "avatar_url",
+  "camera_thumbnail_asset_url",
+  "camera_asset_url",
+];
 
 let opening = false;
 let activeCompanionKey = null;
@@ -205,7 +218,7 @@ function findPacketEnd(content, start, packetBase) {
       content: content.slice(start, end),
     });
 
-    if (Text.length <= MAX_MESSAGE_TEXT_LENGTH) {
+    if (utf8ByteLength(Text) <= MAX_MESSAGE_TEXT_BYTES) {
       best = end;
       low = end + 1;
     } else {
@@ -218,6 +231,27 @@ function findPacketEnd(content, start, packetBase) {
   }
 
   return best;
+}
+
+function utf8ByteLength(text) {
+  let bytes = 0;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      i += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+
+  return bytes;
 }
 
 function getMessageApp(app = {}) {
@@ -252,11 +286,26 @@ async function getPlaylist() {
       ResultBody: "PlainText",
     });
     const body = JSON.parse(result.Body);
-    return Array.isArray(body?.content) ? body.content : [];
+    return Array.isArray(body?.content)
+      ? body.content.map(filterVidcastVideoFields)
+      : [];
   } catch (error) {
     console.warn("Unable to get Vidcast playlist:", error.message || error);
     return [];
   }
+}
+
+function filterVidcastVideoFields(video) {
+  const filtered = {};
+  if (!video || typeof video != "object") return filtered;
+
+  for (const field of VIDCAST_VIDEO_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(video, field)) {
+      filtered[field] = video[field];
+    }
+  }
+
+  return filtered;
 }
 
 async function openWebviews({ PeripheralId } = {}) {

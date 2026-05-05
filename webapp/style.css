@@ -13,7 +13,26 @@
   --duration-bg: rgba(0, 0, 0, 0.7);
   --duration-color: #fff;
   --ellipsis-width: 220px;
+  --skeleton-base: #191c21;
+  --skeleton-highlight: #303641;
+  --skeleton-sheen: rgba(255, 255, 255, 0.08);
+  --skeleton-gradient: linear-gradient(
+    90deg,
+    var(--skeleton-base) 0%,
+    var(--skeleton-highlight) 42%,
+    var(--skeleton-sheen) 50%,
+    var(--skeleton-highlight) 58%,
+    var(--skeleton-base) 100%
+  );
   scrollbar-width: none;
+}
+@keyframes skeleton-loading {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
 }
 body {
   margin: 0;
@@ -71,13 +90,27 @@ body {
 .video-card:hover {
   box-shadow: 0 6px 20px rgba(52, 122, 183, 0.16);
 }
+.video-thumb-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--skeleton-base);
+}
 .video-thumb {
   width: 100%;
   aspect-ratio: 16/9;
   object-fit: cover;
   border-radius: 10px;
   position: relative;
-  background: #ddd;
+  display: block;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
+}
+.video-thumb.is-loaded {
+  background-image: none;
+  animation: none;
 }
 .duration-overlay {
   position: absolute;
@@ -103,8 +136,15 @@ body {
   height: var(--avatar-size);
   border-radius: 50%;
   object-fit: cover;
-  background: #eee;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
   flex-shrink: 0;
+}
+.avatar.is-loaded {
+  background-image: none;
+  animation: none;
 }
 .text-info {
   display: flex;
@@ -132,6 +172,21 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: var(--ellipsis-width);
+}
+.video-card.is-loading-media .video-name,
+.video-card.is-loading-media .creator-info {
+  width: min(100%, 180px);
+  height: 1.15em;
+  border-radius: 999px;
+  color: transparent;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
+}
+.video-card.is-loading-media .creator-info {
+  width: min(78%, 140px);
+  margin-top: 8px;
 }
 /* Player State */
 .player-container {
@@ -270,8 +325,15 @@ body {
   height: 220px;
   border-radius: 14px;
   object-fit: cover;
-  background: #ddd;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
   margin-right: 24px;
+}
+.controls-thumb.is-loaded {
+  background-image: none;
+  animation: none;
 }
 .controls-info {
   flex: 1;
@@ -309,12 +371,43 @@ body {
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
-  background: #eee;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
+}
+.controls-avatar.is-loaded {
+  background-image: none;
+  animation: none;
 }
 .controls-date {
   margin-left: 10px;
   color: #888;
   font-size: 0.98em;
+}
+.controls-video-card.is-loading-media .controls-video-name,
+.controls-video-card.is-loading-media .controls-video-description,
+.controls-video-card.is-loading-media .controls-creator span {
+  display: inline-block;
+  height: 1.15em;
+  border-radius: 999px;
+  color: transparent;
+  background-color: var(--skeleton-base);
+  background-image: var(--skeleton-gradient);
+  background-size: 220% 100%;
+  animation: skeleton-loading 1.25s ease-in-out infinite;
+}
+.controls-video-card.is-loading-media .controls-video-name {
+  width: min(480px, 80%);
+}
+.controls-video-card.is-loading-media .controls-video-description {
+  width: min(720px, 92%);
+}
+.controls-video-card.is-loading-media .controls-creator span {
+  width: 120px;
+}
+.controls-video-card.is-loading-media .controls-creator .controls-date {
+  width: 64px;
 }
 .controls-bar {
   width: 80vw;

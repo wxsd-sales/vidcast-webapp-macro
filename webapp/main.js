@@ -18,6 +18,7 @@ let APP_STATE = {
   target: "Controller",
   peripheralId: null,
   interactive: false,
+  demo: false,
   playback: {
     playing: false,
     paused: true,
@@ -192,7 +193,7 @@ function updatePlayerPlaybackUi(playerElement = player) {
 function updateShareUi() {
   document
     .querySelector(".player-container")
-    ?.classList.toggle("is-sharing", APP_STATE.sharing);
+    ?.classList.toggle("is-sharing", APP_STATE.demo && APP_STATE.sharing);
 
   const shareButton = document.getElementById("btn-share");
   if (!shareButton) return;
@@ -216,6 +217,9 @@ function localizeHashForSurface(hash = {}) {
 
   if (APP_STATE.interactive) localHash.interactive = true;
   else delete localHash.interactive;
+
+  if (APP_STATE.demo) localHash.demo = true;
+  else delete localHash.demo;
 
   return localHash;
 }
@@ -251,11 +255,11 @@ function renderPlaylistGrid(videos) {
             ${videos
               .map(
                 (video) => `
-              <div class="video-card" tabindex="0" data-video-id="${video.id}">
-                <div style="position:relative;">
+              <div class="video-card is-loading-media" tabindex="0" data-video-id="${video.id}">
+                <div class="video-thumb-shell">
                   <img class="video-thumb" src="${
                     video.camera_thumbnail_asset_url
-                  }" alt="Video preview">
+                  }" alt="Video preview" data-card-media>
                   <span class="duration-overlay">${formatDuration(
                     video.duration,
                   )}</span>
@@ -263,7 +267,7 @@ function renderPlaylistGrid(videos) {
                 <div class="card-info">
                   <img class="avatar" src="${video.avatar_url}" alt="${
                     video.user_name
-                  }">
+                  }" data-card-media>
                   <div class="text-info">
                     <div class="video-name" title="${video.name}">${
                       video.name.length > 44
@@ -310,10 +314,10 @@ function renderControlsState(video) {
 
   return `
             <div class="controls-container">
-              <div class="controls-video-card">
+              <div class="controls-video-card is-loading-media">
                 <img src="${
                   video.camera_thumbnail_asset_url
-                }" alt="Video preview" class="controls-thumb">
+                }" alt="Video preview" class="controls-thumb" data-card-media>
                 <div class="controls-info">
                   <div class="controls-video-name" title="${video.name}">${
                     video.name
@@ -322,7 +326,7 @@ function renderControlsState(video) {
                   <div class="controls-creator">
                     <img class="controls-avatar" src="${
                       video.avatar_url
-                    }" alt="${video.user_name}">
+                    }" alt="${video.user_name}" data-card-media>
                     <span>${video.user_name}</span>
                     <span class="controls-date">${formatDate(
                       video.created,
@@ -415,6 +419,8 @@ function render() {
 
 // --- Event Handlers ---
 function setupEventHandlers() {
+  setupCardMediaLoadingStates();
+
   // Playlist card click
   if (APP_STATE.state === "playlist") {
     document.querySelectorAll(".video-card").forEach((card) => {
@@ -507,6 +513,40 @@ function setupEventHandlers() {
   }
 }
 
+function setupCardMediaLoadingStates() {
+  document.querySelectorAll(".is-loading-media").forEach((card) => {
+    const media = Array.from(card.querySelectorAll("[data-card-media]"));
+    const pending = new Set(media);
+
+    if (pending.size == 0) {
+      card.classList.remove("is-loading-media");
+      return;
+    }
+
+    function finish(image, failed = false) {
+      if (!pending.has(image)) return;
+
+      pending.delete(image);
+      image.classList.add("is-loaded");
+      image.classList.toggle("is-load-error", failed);
+
+      if (pending.size == 0) {
+        card.classList.remove("is-loading-media");
+      }
+    }
+
+    media.forEach((image) => {
+      if (image.complete) {
+        finish(image, image.naturalWidth == 0);
+        return;
+      }
+
+      image.addEventListener("load", () => finish(image), { once: true });
+      image.addEventListener("error", () => finish(image, true), { once: true });
+    });
+  });
+}
+
 // --- Hash Change Listener ---
 window.addEventListener("hashchange", () => {
   updateStateFromHash();
@@ -528,6 +568,7 @@ function updateStateFromHash() {
   if (params.target) APP_STATE.target = params.target;
   APP_STATE.peripheralId = params.peripheralId ?? null;
   APP_STATE.interactive = isTruthy(params.interactive);
+  APP_STATE.demo = isTruthy(params.demo);
 
   if (params.mode === "player" && params.id) {
     APP_STATE.state = "player";
@@ -654,6 +695,7 @@ async function main() {
     APP_STATE.target = demoHashes.target ?? APP_STATE.target;
     APP_STATE.peripheralId = demoHashes.peripheralId ?? null;
     APP_STATE.interactive = isTruthy(demoHashes.interactive);
+    APP_STATE.demo = isTruthy(demoHashes.demo);
     console.log("setting demo mode:", APP_STATE.mode);
     console.log(APP_STATE.mode, testPlaylist);
     setHash({ mode: APP_STATE.mode, state: "playlist", id: null });
@@ -669,6 +711,7 @@ async function main() {
       APP_STATE.target = hashes.target ?? APP_STATE.target;
       APP_STATE.peripheralId = hashes.peripheralId ?? null;
       APP_STATE.interactive = isTruthy(hashes.interactive);
+      APP_STATE.demo = isTruthy(hashes.demo);
       console.log("app state", APP_STATE);
       multiConn = new MultiWebRTCDataConnection(xapi, APP_STATE.mode, app);
       // Send a message to all connected webviews

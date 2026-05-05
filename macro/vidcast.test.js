@@ -1,14 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 
 const macroName = "./vidcast.js";
 const panelId = "vidcast";
 const playlistId = "727b3694-97d2-4a6c-97b1-6511d17514d3";
-const playerUrl = "https://wxsd-sales.glitch.io/vidcast-webapp-macro/webapp/index.html";
+const playerUrl = "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html";
+const playlistUrl = `https://api.vidcast.io/v1/playlists/${playlistId}/videos?page=0&pageSize=20&skipUnavailable=false`;
 
-const playlist = [
+const fallbackPlaylist = [
   {
     id: "video-1",
-    name: "Launch Vidcast",
+    name: "Mock playlist fallback",
     description: "A short Vidcast demo",
     created: "1764610200452",
     user_name: "Example User",
@@ -21,8 +29,81 @@ const playlist = [
   },
 ];
 
+const webappVideoFields = [
+  "id",
+  "name",
+  "description",
+  "created",
+  "user_name",
+  "duration",
+  "avatar_url",
+  "camera_thumbnail_asset_url",
+  "camera_asset_url",
+];
+
+async function loadPlaylistFixture() {
+  try {
+    const response = await fetchWithTimeout(playlistUrl, 5000);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const body = await response.json();
+    if (!Array.isArray(body?.content) || body.content.length == 0) {
+      throw new Error("playlist response did not include any videos");
+    }
+
+    return {
+      label: "live playlist fixture",
+      videos: body.content,
+    };
+  } catch (error) {
+    const reason = error?.message || String(error);
+
+    return {
+      label: `mock playlist fallback fixture because ${reason}`,
+      videos: fallbackPlaylist.map((video) => ({
+        ...video,
+        name: `Mock playlist fallback: ${reason}`,
+      })),
+    };
+  }
+}
+
+const playlistFixture = await loadPlaylistFixture();
+const playlist = playlistFixture.videos;
+
+async function fetchWithTimeout(url, timeoutMs) {
+  if (typeof fetch != "function") {
+    throw new Error("fetch is not available in this test runtime");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function flushPromises() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
+}
+
+function filterPlaylistForWebapp(videos) {
+  return videos.map((video) => {
+    const filtered = {};
+
+    for (const field of webappVideoFields) {
+      if (Object.prototype.hasOwnProperty.call(video, field)) {
+        filtered[field] = video[field];
+      }
+    }
+
+    return filtered;
+  });
 }
 
 function mockLocalAccount(xapi, exists = false) {
@@ -83,6 +164,10 @@ function decodeUrlPayload(Url) {
   return JSON.parse(Buffer.from(hash, "base64").toString("utf8"));
 }
 
+function utf8ByteLength(text) {
+  return Buffer.byteLength(text, "utf8");
+}
+
 async function requestPlaylist(xapi, app, requestId = "request-1") {
   xapi.Event.Message.Send.emit({
     Text: JSON.stringify({
@@ -95,6 +180,32 @@ async function requestPlaylist(xapi, app, requestId = "request-1") {
   await flushPromises();
   return xapi.Command.Message.Send.mock.calls.map(([args]) =>
     JSON.parse(args.Text),
+  );
+}
+
+function expectPlaylistPackets({ packets, packetTexts, requestId, app, videos }) {
+  const expectedContent = JSON.stringify(filterPlaylistForWebapp(videos));
+
+  expect(packets.length).toBeGreaterThan(0);
+  expect(packetTexts.every((text) => utf8ByteLength(text) <= 8192)).toBe(true);
+  expect(packets.every((packet) => packet.total == packets.length)).toBe(true);
+  expect(packets.map((packet) => packet.index)).toEqual(
+    packets.map((_, index) => index),
+  );
+
+  for (const packet of packets) {
+    expect(packet).toEqual(
+      expect.objectContaining({
+        type: "response",
+        name: "playlist",
+        requestId,
+        app,
+      }),
+    );
+  }
+
+  expect(packets.map((packet) => packet.content).join("")).toBe(
+    expectedContent,
   );
 }
 
@@ -130,7 +241,7 @@ describe("Vidcast macro", () => {
     );
   });
 
-  it("opens player on the OSD and controls on the clicked peripheral", async () => {
+  it(`opens player and sends playlist packets from ${playlistFixture.label}`, async () => {
     const { default: xapi } = await import("xapi");
     xapi.reset();
     await loadMacro(xapi);
@@ -139,7 +250,7 @@ describe("Vidcast macro", () => {
     const displayArgs = await clickPanel(xapi, { PeripheralId: "panel-1" });
 
     expect(xapi.Command.HttpClient.Get).toHaveBeenCalledWith({
-      Url: `https://api.vidcast.io/v1/playlists/${playlistId}/videos?page=0&pageSize=20&skipUnavailable=false`,
+      Url: playlistUrl,
       ResultBody: "PlainText",
     });
     expect(xapi.Command.UserInterface.Extensions.Panel.Save).not.toHaveBeenCalled();
@@ -196,24 +307,20 @@ describe("Vidcast macro", () => {
       panelId,
       PeripheralId: "panel-1",
     });
-
-    expect(packets).toEqual([
-      {
-        type: "response",
-        name: "playlist",
-        requestId: "request-1",
-        app: {
-          panelId,
-          PeripheralId: "panel-1",
-        },
-        index: 0,
-        total: 1,
-        content: JSON.stringify(playlist),
-      },
-    ]);
-    expect(xapi.Command.Message.Send.mock.calls[0][0].Text.length).toBeLessThanOrEqual(
-      8192,
+    const packetTexts = xapi.Command.Message.Send.mock.calls.map(
+      ([args]) => args.Text,
     );
+
+    expectPlaylistPackets({
+      packets,
+      packetTexts,
+      requestId: "request-1",
+      app: {
+        panelId,
+        PeripheralId: "panel-1",
+      },
+      videos: playlist,
+    });
   });
 
   it("falls back to Target Controller when no PeripheralId is provided", async () => {
@@ -301,13 +408,55 @@ describe("Vidcast macro", () => {
       ([args]) => args.Text,
     );
 
+    expectPlaylistPackets({
+      packets,
+      packetTexts,
+      requestId: "large-request",
+      app: {
+        panelId,
+        Target: "OSD",
+      },
+      videos: largePlaylist,
+    });
     expect(packets.length).toBeGreaterThan(1);
-    expect(packetTexts.every((text) => text.length <= 8192)).toBe(true);
-    expect(packets.every((packet) => packet.total == packets.length)).toBe(true);
-    expect(packets.map((packet) => packet.content).join("")).toBe(
-      JSON.stringify(largePlaylist),
+  });
+
+  it("splits playlist responses by UTF-8 byte length", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+    const largePlaylist = [
+      {
+        ...playlist[0],
+        description: "Résumé ".repeat(3000),
+      },
+    ];
+    await loadMacro(xapi, { playlist: largePlaylist });
+    xapi.clearCallHistory();
+    await clickPanel(xapi);
+
+    const packets = await requestPlaylist(
+      xapi,
+      {
+        panelId,
+        Target: "OSD",
+      },
+      "utf8-request",
     );
-    expect(packets.every((packet) => packet.app.Target == "OSD")).toBe(true);
+    const packetTexts = xapi.Command.Message.Send.mock.calls.map(
+      ([args]) => args.Text,
+    );
+
+    expectPlaylistPackets({
+      packets,
+      packetTexts,
+      requestId: "utf8-request",
+      app: {
+        panelId,
+        Target: "OSD",
+      },
+      videos: largePlaylist,
+    });
+    expect(packets.length).toBeGreaterThan(1);
   });
 
   it("clears the companion webview and deletes the temporary account when a tracked view closes", async () => {

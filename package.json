@@ -6,8 +6,8 @@
   "scripts": {
     "serve:web": "node scripts/serve-web.mjs",
     "screenshot:web": "node scripts/screenshot-web.mjs",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
-    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watchAll --runInBand"
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules --no-warnings\" jest --runInBand --reporters=./scripts/jest-test-names-reporter.cjs",
+    "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules --no-warnings\" jest --watchAll --runInBand --reporters=./scripts/jest-test-names-reporter.cjs"
   },
   "repository": {
     "type": "git",

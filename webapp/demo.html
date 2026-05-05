@@ -262,6 +262,7 @@
       function getOsdPayload() {
         return {
           mode: "player",
+          demo: true,
           panelId: PANEL_ID,
           target: "OSD",
           interactive: state.osdInteractive,
@@ -271,6 +272,7 @@
       function getControllerPayload(index) {
         return {
           mode: "controls",
+          demo: true,
           panelId: PANEL_ID,
           target: "Controller",
           peripheralId: `controller-${index + 1}`,

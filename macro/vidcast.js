@@ -29,7 +29,7 @@ const config = {
   vidcast: {
     playlistId: "727b3694-97d2-4a6c-97b1-6511d17514d3",
   },
-  playerUrl: "https://wxsd-sales.glitch.io/vidcast-webapp-macro/webapp/index.html",
+  playerUrl: "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html",
   panelId: "vidcast",
 };
 

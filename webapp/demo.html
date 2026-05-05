@@ -96,6 +96,9 @@
       }
 
       .surfaces {
+        --demo-surface-height: calc(100vh - 64px);
+        --demo-frame-margin: 10px;
+        --demo-frame-gutter: calc(var(--demo-frame-margin) * 2);
         height: calc(100vh - 64px);
         min-height: 0;
         display: flex;
@@ -106,6 +109,7 @@
       #controller {
         min-height: 0;
         display: flex;
+        align-items: center;
         justify-content: center;
       }
 
@@ -129,17 +133,27 @@
         align-items: center;
         overflow: hidden;
         box-sizing: border-box;
-        margin: 10px;
+        margin: var(--demo-frame-margin);
         min-width: 0;
-        width: min(calc(((100vh - 64px) / 2 - 20px) * (16 / 9)), calc(100vw - 20px));
+        width: min(
+          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * (16 / 9)),
+          calc(100vw - var(--demo-frame-gutter))
+        );
         aspect-ratio: 16 / 9;
         background-color: var(--device-frame);
       }
 
+      .surfaces[data-controller-count="0"] .iframe-wrapper.osd {
+        width: min(
+          calc((var(--demo-surface-height) - var(--demo-frame-gutter)) * (16 / 9)),
+          calc(100vw - var(--demo-frame-gutter))
+        );
+      }
+
       #controller .iframe-wrapper {
         width: min(
-          calc(((100vh - 64px) / 2 - 20px) * (16 / 9)),
-          calc((100vw - (20px * var(--controller-count))) / var(--controller-count))
+          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * (16 / 9)),
+          calc((100vw - (var(--demo-frame-gutter) * var(--controller-count))) / var(--controller-count))
         );
       }
 
@@ -188,6 +202,7 @@
         }
 
         .surfaces {
+          --demo-surface-height: calc(100vh - 113px);
           height: auto;
           min-height: calc(100vh - 113px);
         }
@@ -275,10 +290,12 @@
       }
 
       function renderDemo() {
+        const surfaces = document.querySelector(".surfaces");
         const osd = document.getElementById("osd");
         const controller = document.getElementById("controller");
         osd.replaceChildren();
         controller.replaceChildren();
+        surfaces.dataset.controllerCount = String(state.controllerCount);
         controller.style.setProperty(
           "--controller-count",
           String(Math.max(state.controllerCount, 1)),

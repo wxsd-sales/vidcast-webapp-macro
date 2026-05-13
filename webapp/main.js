@@ -49,7 +49,7 @@ const SHARE_ICON = renderMomentumIcon(
   "icon-share-screen-regular",
   "share-icon",
 );
-const LIBRARY_ICON = renderMomentumIcon("icon-play-filled", "library-icon");
+const LIBRARY_ICON = renderMomentumIcon("icon-view-all-regular", "library-icon");
 
 async function connectDevice(jsxapi, { username, password, ipAddress }) {
   console.log("Connecting to:", ipAddress);

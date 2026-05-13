@@ -43,8 +43,13 @@ const LOGO_URL =
   "https://www.vidcast.io/wp-content/themes/cisco_vidcast/library/images/vidcast-logo--white.svg";
 const PLAYLIST_MESSAGE_NAME = "playlist";
 const PLAYLIST_REQUEST_TIMEOUT = 8000;
-const PLAY_ICON = "&#9658;";
-const PAUSE_ICON = "&#10073;&#10073;";
+const PLAY_ICON = renderMomentumIcon("icon-play-filled", "controls-icon");
+const PAUSE_ICON = renderMomentumIcon("icon-pause-filled", "controls-icon");
+const SHARE_ICON = renderMomentumIcon(
+  "icon-share-screen-regular",
+  "share-icon",
+);
+const LIBRARY_ICON = renderMomentumIcon("icon-play-filled", "library-icon");
 
 async function connectDevice(jsxapi, { username, password, ipAddress }) {
   console.log("Connecting to:", ipAddress);
@@ -174,6 +179,11 @@ function updateControlsPlaybackUi() {
 
   if (playPause) {
     playPause.innerHTML = APP_STATE.playback.playing ? PAUSE_ICON : PLAY_ICON;
+    playPause.setAttribute(
+      "aria-label",
+      APP_STATE.playback.playing ? "Pause" : "Play",
+    );
+    playPause.title = APP_STATE.playback.playing ? "Pause" : "Play";
   }
 }
 
@@ -200,7 +210,7 @@ function updateShareUi() {
 
   shareButton.classList.toggle("is-sharing", APP_STATE.sharing);
   shareButton.setAttribute("aria-pressed", String(APP_STATE.sharing));
-  shareButton.innerHTML = `<span class="share-icon"></span> ${
+  shareButton.innerHTML = `${SHARE_ICON} ${
     APP_STATE.sharing ? "Stop Share" : "Share"
   }`;
 }
@@ -234,12 +244,16 @@ function setRemoteHash(hash) {
   }
 }
 
+function renderMomentumIcon(iconClass, extraClasses = "") {
+  return `<span class="icon ${iconClass} ${extraClasses}" aria-hidden="true"></span>`;
+}
+
 // --- Render Functions ---
 function renderHeader(state) {
   const library =
     APP_STATE.state == "playlist"
       ? ""
-      : '<button class="controls-library" id="btn-library"><span class="library-icon"></span> Library</button>';
+      : `<button class="controls-library" id="btn-library">${LIBRARY_ICON} Library</button>`;
 
   return `
             <div class="header">
@@ -290,7 +304,7 @@ function renderPlaylistGrid(videos) {
 function renderPlayerState(video) {
   const library = !isInteractiveSurface()
     ? ""
-    : '<button class="controls-library player-library-button" id="btn-library"><span class="library-icon"></span> Library</button>';
+    : `<button class="controls-library player-library-button" id="btn-library">${LIBRARY_ICON} Library</button>`;
   const controls = isInteractiveSurface() ? "controls" : "";
   return `
             <div class="player-container">
@@ -338,15 +352,47 @@ function renderControlsState(video) {
                     <input type="range" class="controls-slider" id="slider" min="0" max="${duration}" value="${currentTime}" step="0.1">
               </div>
               <div class="controls-bar">
-                <button class="controls-btn controls-btn-rotate" id="btn-backward" title="Back 10s">&#x21BA;</button>
-                <button class="controls-btn" id="btn-playpause" title="Play/Pause">${playPauseIcon}</button>
+                <button class="controls-btn" id="btn-backward" title="Back 10s" aria-label="Back 10 seconds">${renderMomentumIcon(
+                  "icon-redo-regular",
+                  "controls-icon controls-icon-backward",
+                )}</button>
+                <button class="controls-btn" id="btn-playpause" title="${
+                  APP_STATE.playback.playing ? "Pause" : "Play"
+                }" aria-label="${
+                  APP_STATE.playback.playing ? "Pause" : "Play"
+                }">${playPauseIcon}</button>
                 
-                <button class="controls-btn controls-btn-rotate" id="btn-forward" title="Forward 10s">&#x21BB;</button>
+                <button class="controls-btn" id="btn-forward" title="Forward 10s" aria-label="Forward 10 seconds">${renderMomentumIcon(
+                  "icon-redo-regular",
+                  "controls-icon",
+                )}</button>
                 <span class="controls-time" id="time-label">${formatPlaybackTime(
                   currentTime,
                 )} / ${formatPlaybackTime(duration)}</span>
-                <button class="controls-share${shareClass}" id="btn-share" aria-pressed="${APP_STATE.sharing}"><span class="share-icon"></span> ${shareLabel}</button>
+                <button class="controls-share${shareClass}" id="btn-share" aria-pressed="${APP_STATE.sharing}">${SHARE_ICON} ${shareLabel}</button>
               </div>
+            </div>
+          `;
+}
+
+function renderVolumeRocker() {
+  if (!shouldShowVolumeRocker()) return "";
+
+  return `
+            <div class="volume-rocker" role="group" aria-label="System volume">
+              <button class="volume-rocker-btn" type="button" data-volume-action="decrease" title="Volume down" aria-label="Volume down">
+                ${renderMomentumIcon(
+                  "icon-speaker-turn-down-regular",
+                  "volume-icon",
+                )}
+              </button>
+              <span class="volume-rocker-divider" aria-hidden="true"></span>
+              <button class="volume-rocker-btn" type="button" data-volume-action="increase" title="Volume up" aria-label="Volume up">
+                ${renderMomentumIcon(
+                  "icon-speaker-turn-up-regular",
+                  "volume-icon",
+                )}
+              </button>
             </div>
           `;
 }
@@ -367,6 +413,13 @@ function isInteractiveSurface() {
     APP_STATE.target === "Controller" ||
     APP_STATE.peripheralId ||
     isTouchDevice()
+  );
+}
+
+function shouldShowVolumeRocker() {
+  return (
+    APP_STATE.mode === "controls" &&
+    (APP_STATE.state === "playlist" || APP_STATE.state === "controls")
   );
 }
 
@@ -400,7 +453,9 @@ function render() {
       return;
     }
     app.innerHTML =
-      renderHeader(APP_STATE.videos) + renderPlaylistGrid(APP_STATE.videos);
+      renderHeader(APP_STATE.videos) +
+      renderPlaylistGrid(APP_STATE.videos) +
+      renderVolumeRocker();
     setupEventHandlers();
     return;
   }
@@ -408,11 +463,16 @@ function render() {
   if (APP_STATE.mode === "player" && APP_STATE.current) {
     app.innerHTML = renderPlayerState(APP_STATE.current);
   } else if (APP_STATE.mode === "controls" && APP_STATE.current) {
-    app.innerHTML = renderHeader() + renderControlsState(APP_STATE.current);
+    app.innerHTML =
+      renderHeader() +
+      renderControlsState(APP_STATE.current) +
+      renderVolumeRocker();
   } else {
     // Playlist
     app.innerHTML =
-      renderHeader(APP_STATE.videos) + renderPlaylistGrid(APP_STATE.videos);
+      renderHeader(APP_STATE.videos) +
+      renderPlaylistGrid(APP_STATE.videos) +
+      renderVolumeRocker();
   }
   setupEventHandlers();
 }
@@ -420,6 +480,7 @@ function render() {
 // --- Event Handlers ---
 function setupEventHandlers() {
   setupCardMediaLoadingStates();
+  setupVolumeRockerEventHandlers();
 
   // Playlist card click
   if (APP_STATE.state === "playlist") {
@@ -511,6 +572,29 @@ function setupEventHandlers() {
 
     if (playerController) playerController.controlPlayer(player);
   }
+}
+
+function setupVolumeRockerEventHandlers() {
+  document.querySelectorAll("[data-volume-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      adjustSystemVolume(button.dataset.volumeAction);
+    });
+  });
+}
+
+function adjustSystemVolume(action) {
+  const volumeCommands = xapi?.Command?.Audio?.Volume;
+  const commandName =
+    action === "increase" ? "Increase" : action === "decrease" ? "Decrease" : "";
+
+  if (!commandName || typeof volumeCommands?.[commandName] != "function") {
+    console.warn("System volume command unavailable:", action);
+    return;
+  }
+
+  Promise.resolve(volumeCommands[commandName]()).catch((error) => {
+    console.warn(`Unable to ${action} system volume:`, error);
+  });
 }
 
 function setupCardMediaLoadingStates() {

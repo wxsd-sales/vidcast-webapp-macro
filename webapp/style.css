@@ -34,12 +34,26 @@
     background-position: -120% 0;
   }
 }
+html {
+  height: 100%;
+  touch-action: none;
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, sans-serif;
   background: rgb(15, 15, 15);
   color: rgba(255, 255, 255, 0.95);
+  height: 100%;
   min-height: 100vh;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .header {
@@ -62,9 +76,14 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr));
   gap: var(--card-gap);
-  margin-top: calc(var(--header-height)+ 32);
   padding: 32px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   max-width: 1200px;
   margin: 0 auto;
 }

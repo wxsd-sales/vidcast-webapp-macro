@@ -143,6 +143,11 @@ async function loadMacro(xapi, options = {}) {
     Body: JSON.stringify({ content: options.playlist ?? playlist }),
   });
 
+  if (options.httpClientMode) {
+    await xapi.Config.HttpClient.Mode.set(options.httpClientMode);
+    xapi.Config.HttpClient.Mode.set.mockClear();
+  }
+
   mockLocalAccount(xapi, options.accountExists ?? false);
   await import(macroName);
   await flushPromises();
@@ -239,6 +244,26 @@ describe("Vidcast macro", () => {
         "<Icon>Custom</Icon><CustomIcon><Id>vidcast-icon</Id></CustomIcon>",
       ),
     );
+  });
+
+  it("enables HTTPClient when its Mode config is Off on startup", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+
+    await loadMacro(xapi, { httpClientMode: "Off" });
+
+    expect(xapi.Config.HttpClient.Mode.set).toHaveBeenCalledWith("On");
+    await expect(xapi.Config.HttpClient.Mode.get()).resolves.toBe("On");
+  });
+
+  it("leaves HTTPClient Mode config alone when it is already On", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+
+    await loadMacro(xapi, { httpClientMode: "On" });
+
+    expect(xapi.Config.HttpClient.Mode.set).not.toHaveBeenCalled();
+    await expect(xapi.Config.HttpClient.Mode.get()).resolves.toBe("On");
   });
 
   it(`opens player and sends playlist packets from ${playlistFixture.label}`, async () => {

@@ -50,6 +50,11 @@ const SHARE_ICON = renderMomentumIcon(
   "share-icon",
 );
 const LIBRARY_ICON = renderMomentumIcon("icon-view-all-regular", "library-icon");
+const DEVICE_CONNECTION_ALERT_ID = "device-connection-alert";
+const DEVICE_CONNECTION_ALERT_ICON = renderMomentumIcon(
+  "icon-error-legacy-filled",
+  "device-connection-alert-icon",
+);
 
 async function connectDevice(jsxapi, { username, password, ipAddress }) {
   console.log("Connecting to:", ipAddress);
@@ -404,6 +409,37 @@ function renderWaitingState() {
               <div class="waiting-message">Select a Vidcast on the controller</div>
             </div>
           `;
+}
+
+function renderDeviceConnectionAlert() {
+  return `
+            <div class="device-connection-alert" id="${DEVICE_CONNECTION_ALERT_ID}" role="alert">
+              ${DEVICE_CONNECTION_ALERT_ICON}
+              <div class="device-connection-alert-text">
+                <strong>Unable to connect to this device</strong>
+                <span>The device's certificate may not be trusted by this webview yet. Try restarting the device to restore the connection.</span>
+              </div>
+              <button type="button" class="device-connection-alert-dismiss" aria-label="Dismiss notification">&times;</button>
+            </div>
+          `;
+}
+
+// Shown when the local websocket connection back to the RoomOS device
+// fails, which typically happens when the device's self-signed certificate
+// hasn't yet been trusted by the webview's Chromium instance.
+function showDeviceConnectionAlert() {
+  if (APP_STATE.demo) return;
+  if (document.getElementById(DEVICE_CONNECTION_ALERT_ID)) return;
+
+  document.body.insertAdjacentHTML("beforeend", renderDeviceConnectionAlert());
+  document
+    .getElementById(DEVICE_CONNECTION_ALERT_ID)
+    ?.querySelector(".device-connection-alert-dismiss")
+    .addEventListener("click", dismissDeviceConnectionAlert);
+}
+
+function dismissDeviceConnectionAlert() {
+  document.getElementById(DEVICE_CONNECTION_ALERT_ID)?.remove();
 }
 
 function isInteractiveSurface() {
@@ -803,6 +839,7 @@ async function main() {
       console.warn("Unable to connect to device:", hashes.ipAddress);
       console.warn(err);
       APP_STATE.videos = testPlaylist;
+      showDeviceConnectionAlert();
     }
   }
 

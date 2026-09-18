@@ -1,11 +1,11 @@
 /********************************************************
  * Macro Author:      	William Mills
- *                    	Technical Solutions Specialist
+ *                    	Solutions Engineer
  *                    	wimills@cisco.com
  *                    	Cisco Systems
  *
- * Version: 1-0-0
- * Released: 11/13/25
+ * Version: 1-1-0
+ * Released: 09/18/26
  *
  * This is an example macro which demonstrates how to open and
  * control playback of Vidcast videos from a paired Room Navigator.

@@ -64,9 +64,15 @@ init().catch((error) =>
 );
 
 async function init() {
+  const httpMode = await xapi.Config.HttpClient.Mode.get();
+
+  if(httpMode == 'Off'){
+    console.warn('HTTPClient Disabled - Enabling');
+    await xapi.Config.HttpClient.Mode.set('On');
+  }
   xapi.Event.UserInterface.Extensions.Panel.Clicked.on(processClicks);
   xapi.Event.Message.Send.on(processMessageSend);
-
+  xapi.Command.Message.Send({Text: 'text string'});
   xapi.Status.UserInterface.WebView.on(({ URL, Type, id, ghost }) => {
     const closedTarget = getWebviewTarget(id);
     if (ghost && closedTarget) {

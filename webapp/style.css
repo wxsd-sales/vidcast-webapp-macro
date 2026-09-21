@@ -24,7 +24,6 @@
     var(--skeleton-highlight) 58%,
     var(--skeleton-base) 100%
   );
-  scrollbar-width: none;
 }
 @keyframes skeleton-loading {
   from {
@@ -72,11 +71,7 @@ body {
 .header .logo {
   height: 100%;
 }
-.playlist-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr));
-  gap: var(--card-gap);
-  padding: 32px;
+.playlist-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -84,8 +79,24 @@ body {
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+.playlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr));
+  gap: var(--card-gap);
+  padding: 32px;
   max-width: 1200px;
   margin: 0 auto;
+}
+/* Mouse-driven devices show a persistent OS scrollbar here; touchscreens
+   (Room Navigator, tablets) already use a self-hiding overlay indicator. */
+@media (pointer: fine) {
+  .playlist-scroll {
+    scrollbar-width: none;
+  }
+  .playlist-scroll::-webkit-scrollbar {
+    display: none;
+  }
 }
 .video-card {
   background: var(--card-bg);

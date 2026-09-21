@@ -270,6 +270,7 @@ function renderHeader(state) {
 
 function renderPlaylistGrid(videos) {
   return `
+            <div class="playlist-scroll">
             <div class="playlist-grid">
             ${videos
               .map(
@@ -302,6 +303,7 @@ function renderPlaylistGrid(videos) {
             `,
               )
               .join("")}
+            </div>
             </div>
           `;
 }

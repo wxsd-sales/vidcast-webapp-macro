@@ -64,12 +64,23 @@ init().catch((error) =>
 );
 
 async function init() {
+
+  // Ensure that HTTPClient is Enabled
   const httpMode = await xapi.Config.HttpClient.Mode.get();
 
   if(httpMode == 'Off'){
     console.warn('HTTPClient Disabled - Enabling');
     await xapi.Config.HttpClient.Mode.set('On');
   }
+
+  // Ensure that AllowDeviceCertificate is Enabled
+  const allowDeviceCertificate = await xapi.Config.WebEngine.Features.AllowDeviceCertificate.get()
+
+  if(allowDeviceCertificate == 'False'){
+    console.warn('WebEngine Features AllowDeviceCertificate disabled - Enabling');
+    await xapi.Config.WebEngine.Features.AllowDeviceCertificate.set('True');
+  }
+
   xapi.Event.UserInterface.Extensions.Panel.Clicked.on(processClicks);
   xapi.Event.Message.Send.on(processMessageSend);
   xapi.Command.Message.Send({Text: 'text string'});

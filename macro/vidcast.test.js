@@ -148,6 +148,13 @@ async function loadMacro(xapi, options = {}) {
     xapi.Config.HttpClient.Mode.set.mockClear();
   }
 
+  if (options.allowDeviceCertificate) {
+    await xapi.Config.WebEngine.Features.AllowDeviceCertificate.set(
+      options.allowDeviceCertificate,
+    );
+    xapi.Config.WebEngine.Features.AllowDeviceCertificate.set.mockClear();
+  }
+
   mockLocalAccount(xapi, options.accountExists ?? false);
   await import(macroName);
   await flushPromises();
@@ -264,6 +271,34 @@ describe("Vidcast macro", () => {
 
     expect(xapi.Config.HttpClient.Mode.set).not.toHaveBeenCalled();
     await expect(xapi.Config.HttpClient.Mode.get()).resolves.toBe("On");
+  });
+
+  it("enables WebEngine Features AllowDeviceCertificate when it is False on startup", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+
+    await loadMacro(xapi, { allowDeviceCertificate: "False" });
+
+    expect(
+      xapi.Config.WebEngine.Features.AllowDeviceCertificate.set,
+    ).toHaveBeenCalledWith("True");
+    await expect(
+      xapi.Config.WebEngine.Features.AllowDeviceCertificate.get(),
+    ).resolves.toBe("True");
+  });
+
+  it("leaves WebEngine Features AllowDeviceCertificate alone when it is already True", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+
+    await loadMacro(xapi, { allowDeviceCertificate: "True" });
+
+    expect(
+      xapi.Config.WebEngine.Features.AllowDeviceCertificate.set,
+    ).not.toHaveBeenCalled();
+    await expect(
+      xapi.Config.WebEngine.Features.AllowDeviceCertificate.get(),
+    ).resolves.toBe("True");
   });
 
   it(`opens player and sends playlist packets from ${playlistFixture.label}`, async () => {

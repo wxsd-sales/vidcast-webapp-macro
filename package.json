@@ -1,6 +1,6 @@
 {
   "name": "vidcast-webapp-macro",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "This is an example macro which demonstrates how to open and control playback of Vidcast videos from a paired Room Navigator.",
   "type": "module",
   "scripts": {

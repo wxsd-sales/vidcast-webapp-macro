@@ -10,7 +10,7 @@ import {
 } from "./utils.js";
 
 // --- State Management ---
-let APP_STATE = {
+export let APP_STATE = {
   videos: [],
   current: null, // current video object
   state: "playlist", // or 'player' or 'controls'
@@ -19,6 +19,7 @@ let APP_STATE = {
   peripheralId: null,
   interactive: false,
   demo: false,
+  showLogo: true,
   playback: {
     playing: false,
     paused: true,
@@ -84,6 +85,12 @@ function getMessageApp({ panelId, username, target, peripheralId }) {
 
 function isTruthy(value) {
   return value === true || value === "true";
+}
+
+// The Vidcast logo defaults to visible; it's only hidden when the hash
+// parameter is explicitly present and falsy.
+export function resolveShowLogo(value) {
+  return value === undefined ? true : isTruthy(value);
 }
 
 function toFiniteNumber(value, fallback = 0) {
@@ -220,7 +227,7 @@ function updateShareUi() {
   }`;
 }
 
-function localizeHashForSurface(hash = {}) {
+export function localizeHashForSurface(hash = {}) {
   const localHash = {
     ...hash,
     mode: APP_STATE.mode,
@@ -235,6 +242,9 @@ function localizeHashForSurface(hash = {}) {
 
   if (APP_STATE.demo) localHash.demo = true;
   else delete localHash.demo;
+
+  if (APP_STATE.showLogo === false) localHash.showLogo = false;
+  else delete localHash.showLogo;
 
   return localHash;
 }
@@ -313,13 +323,16 @@ function renderPlayerState(video) {
     ? ""
     : `<button class="controls-library player-library-button" id="btn-library">${LIBRARY_ICON} Library</button>`;
   const controls = isInteractiveSurface() ? "controls" : "";
+  const logoHeader = APP_STATE.showLogo
+    ? `<div class="player-logo-header">
+                  <img src="${LOGO_URL}" alt="Logo" class="logo">
+                </div>`
+    : "";
   return `
             <div class="player-container">
               <div class="player-video-wrapper">
                 <video class="player-video" id="player-video" src="${video.camera_asset_url}" ${controls} poster="${video.camera_thumbnail_asset_url}"></video>
-                <div class="player-logo-header">
-                  <img src="${LOGO_URL}" alt="Logo" class="logo">
-                </div>
+                ${logoHeader}
                 ${library}
               </div>
             </div>
@@ -462,7 +475,7 @@ function shouldShowVolumeRocker() {
 }
 
 // --- Main Render ---
-function render() {
+export function render() {
   const app = document.getElementById("app");
   console.log("Rendering - state:", APP_STATE.state, "mode:", APP_STATE.mode);
 
@@ -680,7 +693,7 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-function updateStateFromHash() {
+export function updateStateFromHash() {
   const params = getHashes() ?? {};
   const previousVideoId = APP_STATE.current?.id ?? null;
   console.log(APP_STATE.mode, "updating state from hash");
@@ -691,6 +704,7 @@ function updateStateFromHash() {
   APP_STATE.peripheralId = params.peripheralId ?? null;
   APP_STATE.interactive = isTruthy(params.interactive);
   APP_STATE.demo = isTruthy(params.demo);
+  APP_STATE.showLogo = resolveShowLogo(params.showLogo);
 
   if (params.mode === "player" && params.id) {
     APP_STATE.state = "player";
@@ -818,6 +832,7 @@ async function main() {
     APP_STATE.peripheralId = demoHashes.peripheralId ?? null;
     APP_STATE.interactive = isTruthy(demoHashes.interactive);
     APP_STATE.demo = isTruthy(demoHashes.demo);
+    APP_STATE.showLogo = resolveShowLogo(demoHashes.showLogo);
     console.log("setting demo mode:", APP_STATE.mode);
     console.log(APP_STATE.mode, testPlaylist);
     setHash({ mode: APP_STATE.mode, state: "playlist", id: null });
@@ -834,6 +849,7 @@ async function main() {
       APP_STATE.peripheralId = hashes.peripheralId ?? null;
       APP_STATE.interactive = isTruthy(hashes.interactive);
       APP_STATE.demo = isTruthy(hashes.demo);
+      APP_STATE.showLogo = resolveShowLogo(hashes.showLogo);
       console.log("app state", APP_STATE);
       multiConn = new MultiWebRTCDataConnection(xapi, APP_STATE.mode, app);
       // Send a message to all connected webviews
@@ -855,6 +871,12 @@ async function main() {
       if (!playerController) playerController = new PlayerController(multiConn);
       if (player) playerController.controlPlayer(player);
       playerController?.sendCurrentState("connection-open");
+    } else {
+      // A controller may connect after the OSD already has a video
+      // selected (e.g. a new controller opened later in the demo page);
+      // ask the OSD for its current state so this instance can sync to it
+      // instead of defaulting to the playlist view.
+      multiConn.sendMessageToAll({ requestState: true });
     }
   });
 
@@ -873,7 +895,14 @@ async function main() {
       return;
     }
 
-    const { hash, player, share } = message;
+    const { hash, player, share, requestState } = message;
+    if (requestState) {
+      if (APP_STATE.mode == "player") {
+        multiConn.sendMessageToAll({ hash: getHashes() });
+      }
+      return;
+    }
+
     if (hash) {
       const localHash = localizeHashForSurface(hash);
       setRemoteHash(localHash);

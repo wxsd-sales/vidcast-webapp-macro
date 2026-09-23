@@ -26,9 +26,11 @@
   "homepage": "https://github.com/wxsd-sales/vidcast-webapp-macro#readme",
   "devDependencies": {
     "jest": "^30.3.0",
-    "jest-mock-xapi": "^1.0.5"
+    "jest-environment-jsdom": "^30.3.0",
+    "jest-mock-xapi": "^1.0.5",
+    "jsdom": "^26.1.0"
   },
-    "jest": {
+  "jest": {
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^xapi$": "jest-mock-xapi"

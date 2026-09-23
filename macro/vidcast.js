@@ -31,6 +31,8 @@ const config = {
   },
   playerUrl: "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html",
   panelId: "vidcast",
+  // Controls whether the Vidcast logo is shown on the player view on the OSD
+  showLogo: true,
 };
 
 
@@ -447,6 +449,7 @@ async function createWebappUrl({
     mode,
     panelId: config.panelId,
     target: Target,
+    showLogo: config.showLogo,
   };
 
   if (hasPeripheralId(PeripheralId)) payload.peripheralId = PeripheralId;

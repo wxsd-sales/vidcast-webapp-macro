@@ -14,6 +14,9 @@
         --control-bg: #2d333b;
         --control-border: #4a525d;
         --control-text: #f4f7fb;
+        /* Fallback only: kept in sync with the header's real (possibly
+           multi-line) rendered height by a ResizeObserver below. */
+        --header-height: 64px;
       }
 
       html,
@@ -131,10 +134,13 @@
       }
 
       .surfaces {
-        --demo-surface-height: calc(100vh - 64px);
+        --demo-surface-height: calc(100vh - var(--header-height));
         --demo-frame-margin: 10px;
         --demo-frame-gutter: calc(var(--demo-frame-margin) * 2);
-        height: calc(100vh - 64px);
+        /* Below this width a controller frame wraps onto its own row
+           instead of continuing to shrink. */
+        --controller-min-width: 240px;
+        height: calc(100vh - var(--header-height));
         min-height: 0;
         display: flex;
         flex-direction: column;
@@ -154,7 +160,9 @@
 
       #controller {
         flex: 1;
-        flex-direction: row;
+        flex-wrap: wrap;
+        align-content: center;
+        overflow-y: auto;
       }
 
       #controller:empty {
@@ -162,7 +170,26 @@
       }
 
       .iframe-wrapper {
-        flex: 0 1 auto;
+        /* The real webview's own layout resolution (CSS pixels, unitless
+           here so it can be used in ratio math below). Defaults to the
+           OSD's 1920x1080; .controller overrides both to 1280x800. Every
+           other measurement on this frame - its own width/height, the
+           iframe's zoom level, and its border thickness - is derived from
+           these two numbers plus the frame's *actual* rendered size, so
+           they all stay correctly proportioned at any demo window size. */
+        --device-w: 1920;
+        --device-h: 1080;
+        /* The frame's own intended width, and (via its device aspect
+           ratio) its own intended height. iframe zoom and border
+           thickness below both read this back, instead of assuming a
+           viewport-wide size that may not match how this particular frame
+           actually laid out. */
+        --frame-width: min(
+          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * var(--device-w) / var(--device-h)),
+          calc(100vw - var(--demo-frame-gutter))
+        );
+        --frame-height: calc(var(--frame-width) * var(--device-h) / var(--device-w));
+        flex: 0 1 var(--frame-width);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -170,39 +197,46 @@
         box-sizing: border-box;
         margin: var(--demo-frame-margin);
         min-width: 0;
-        width: min(
-          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * (16 / 9)),
-          calc(100vw - var(--demo-frame-gutter))
-        );
-        aspect-ratio: 16 / 9;
+        width: var(--frame-width);
+        aspect-ratio: var(--device-w) / var(--device-h);
         background-color: var(--device-frame);
       }
 
+      .iframe-wrapper.controller {
+        --device-w: 1280;
+        --device-h: 800;
+      }
+
       .surfaces[data-controller-count="0"] .iframe-wrapper.osd {
-        width: min(
-          calc((var(--demo-surface-height) - var(--demo-frame-gutter)) * (16 / 9)),
+        --frame-width: min(
+          calc((var(--demo-surface-height) - var(--demo-frame-gutter)) * var(--device-w) / var(--device-h)),
           calc(100vw - var(--demo-frame-gutter))
         );
       }
 
       #controller .iframe-wrapper {
-        width: min(
-          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * (16 / 9)),
+        /* Ideal width if every current controller fit on one row; flex-wrap
+           below takes over once --controller-min-width can no longer be
+           honored at that count, wrapping extra frames onto new rows
+           instead of shrinking them further. */
+        --frame-width: min(
+          calc(((var(--demo-surface-height) / 2) - var(--demo-frame-gutter)) * var(--device-w) / var(--device-h)),
           calc((100vw - (var(--demo-frame-gutter) * var(--controller-count))) / var(--controller-count))
         );
+        min-width: var(--controller-min-width);
       }
 
       .iframe-wrapper iframe {
         display: block;
         height: 100%;
         width: 100%;
-        zoom: calc((100vh - 64px) / 1920px);
+        zoom: calc(var(--frame-height) / (var(--device-h) * 1px));
         background-color: black;
         border: none;
       }
 
       .iframe-wrapper.osd {
-        border-width: calc(20px * (100vh / 1920px));
+        border-width: calc(20px * var(--frame-height) / (var(--device-h) * 1px));
         border-style: solid;
         border-color: var(--device-frame);
       }
@@ -210,22 +244,17 @@
       .iframe-wrapper.controller {
         display: flex;
         flex-direction: row;
-        border-radius: calc(50px * (100vh / 1920px));
-        border-width: calc(50px * (100vh / 1920px));
+        border-radius: calc(50px * var(--frame-height) / (var(--device-h) * 1px));
+        border-width: calc(50px * var(--frame-height) / (var(--device-h) * 1px));
         border-style: solid;
         border-color: var(--device-frame);
       }
 
       .iframe-wrapper.controller iframe {
-        border-radius: calc(50px * (100vh / 1920px));
+        border-radius: calc(50px * var(--frame-height) / (var(--device-h) * 1px));
       }
 
       @media (max-width: 900px) {
-        html,
-        body {
-          overflow: auto;
-        }
-
         .demo-header {
           align-items: flex-start;
           flex-direction: column;
@@ -234,23 +263,6 @@
 
         .demo-controls {
           justify-content: flex-start;
-        }
-
-        .surfaces {
-          --demo-surface-height: calc(100vh - 113px);
-          height: auto;
-          min-height: calc(100vh - 113px);
-        }
-
-        #controller {
-          flex-direction: column;
-        }
-
-        .iframe-wrapper {
-          min-width: 0;
-          max-width: none;
-          width: calc(100vw - 20px);
-          aspect-ratio: 16 / 9;
         }
       }
     </style>
@@ -263,6 +275,12 @@
           <span>OSD</span>
           <button id="osd-interactive" type="button" aria-pressed="false">
             Non Interactive
+          </button>
+        </label>
+        <label class="demo-control">
+          <span>Logo</span>
+          <button id="osd-logo" type="button" aria-pressed="true">
+            Visible
           </button>
         </label>
         <label class="demo-control">
@@ -300,6 +318,7 @@
       const state = {
         osdInteractive: false,
         controllerCount: 2,
+        showLogo: true,
       };
 
       function encodeLaunchHash(payload) {
@@ -313,7 +332,26 @@
           panelId: PANEL_ID,
           target: "OSD",
           interactive: state.osdInteractive,
+          showLogo: state.showLogo,
         };
+      }
+
+      // Patches the given fields onto the OSD iframe's current hash so the
+      // player view updates live without reloading the iframe.
+      function patchOsdHash(patch) {
+        const iframe = document.querySelector("#osd iframe");
+        const win = iframe?.contentWindow;
+        if (!win) return;
+
+        let currentHash = {};
+        try {
+          const raw = win.location.hash.slice(1);
+          if (raw) currentHash = JSON.parse(atob(raw));
+        } catch (error) {
+          currentHash = {};
+        }
+
+        win.location.hash = encodeLaunchHash({ ...currentHash, ...patch });
       }
 
       function getControllerPayload(index) {
@@ -338,21 +376,34 @@
         return frameWrapper;
       }
 
-      function renderDemo() {
-        const surfaces = document.querySelector(".surfaces");
+      // Only used at startup: later OSD state changes (interactive, logo)
+      // are patched live onto this same iframe via patchOsdHash() instead
+      // of reloading it, since it's the one surface actually being watched.
+      function renderOsdFrame() {
         const osd = document.getElementById("osd");
+        osd.replaceChildren(createFrame("osd", getOsdPayload(), "OSD"));
+      }
+
+      // Adds or removes only the controller iframes needed to match the
+      // current controllerCount, leaving iframes that already match their
+      // index untouched so changing the count doesn't reload every
+      // controller (or the unrelated OSD iframe) each time.
+      function syncControllerFrames() {
+        const surfaces = document.querySelector(".surfaces");
         const controller = document.getElementById("controller");
-        osd.replaceChildren();
-        controller.replaceChildren();
+        const wrappers = Array.from(controller.children);
+
         surfaces.dataset.controllerCount = String(state.controllerCount);
         controller.style.setProperty(
           "--controller-count",
           String(Math.max(state.controllerCount, 1)),
         );
 
-        osd.appendChild(createFrame("osd", getOsdPayload(), "OSD"));
+        for (let i = wrappers.length - 1; i >= state.controllerCount; i -= 1) {
+          wrappers[i].remove();
+        }
 
-        for (let i = 0; i < state.controllerCount; i += 1) {
+        for (let i = wrappers.length; i < state.controllerCount; i += 1) {
           controller.appendChild(
             createFrame(
               "controller",
@@ -372,25 +423,62 @@
         document.getElementById("controller-count").value = String(
           state.controllerCount,
         );
+
+        const logoToggle = document.getElementById("osd-logo");
+        logoToggle.textContent = state.showLogo ? "Visible" : "Hidden";
+        logoToggle.setAttribute("aria-pressed", String(state.showLogo));
+      }
+
+      // Keeps --header-height in sync with the header's real rendered
+      // height (it can wrap onto extra lines on narrow viewports), so the
+      // surfaces area below is sized exactly right instead of guessing a
+      // fixed pixel height per breakpoint.
+      function watchHeaderHeight() {
+        const header = document.querySelector(".demo-header");
+
+        function syncHeaderHeight() {
+          document.documentElement.style.setProperty(
+            "--header-height",
+            `${header.offsetHeight}px`,
+          );
+        }
+
+        if (typeof ResizeObserver === "function") {
+          new ResizeObserver(syncHeaderHeight).observe(header);
+        } else {
+          window.addEventListener("resize", syncHeaderHeight);
+        }
+
+        syncHeaderHeight();
       }
 
       function init() {
         const osdToggle = document.getElementById("osd-interactive");
         const controllerCount = document.getElementById("controller-count");
+        const logoToggle = document.getElementById("osd-logo");
+
+        watchHeaderHeight();
 
         osdToggle.addEventListener("click", () => {
           state.osdInteractive = !state.osdInteractive;
           syncControls();
-          renderDemo();
+          patchOsdHash({ interactive: state.osdInteractive });
         });
 
         controllerCount.addEventListener("change", (event) => {
           state.controllerCount = Number(event.target.value);
-          renderDemo();
+          syncControllerFrames();
+        });
+
+        logoToggle.addEventListener("click", () => {
+          state.showLogo = !state.showLogo;
+          syncControls();
+          patchOsdHash({ showLogo: state.showLogo });
         });
 
         syncControls();
-        renderDemo();
+        renderOsdFrame();
+        syncControllerFrames();
       }
 
       init();

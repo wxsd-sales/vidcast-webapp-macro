@@ -301,6 +301,20 @@ describe("Vidcast macro", () => {
     ).resolves.toBe("True");
   });
 
+  it("includes the configured showLogo flag in both webview launch URLs", async () => {
+    const { default: xapi } = await import("xapi");
+    xapi.reset();
+    await loadMacro(xapi);
+    xapi.clearCallHistory();
+
+    const displayArgs = await clickPanel(xapi, { PeripheralId: "panel-1" });
+    const osdPayload = decodeUrlPayload(displayArgs[0].Url);
+    const controlsPayload = decodeUrlPayload(displayArgs[1].Url);
+
+    expect(osdPayload.showLogo).toBe(true);
+    expect(controlsPayload.showLogo).toBe(true);
+  });
+
   it(`opens player and sends playlist packets from ${playlistFixture.label}`, async () => {
     const { default: xapi } = await import("xapi");
     xapi.reset();

@@ -536,6 +536,12 @@ body {
     color 0.15s;
   margin-left: auto;
 }
+/* The unconditional display:flex above otherwise beats the [hidden]
+   attribute's user-agent display:none, since author styles always win
+   over user-agent ones regardless of specificity. */
+.controls-share[hidden] {
+  display: none;
+}
 .controls-share.is-sharing {
   background: #9d1425;
   border-color: #ff6b7a;

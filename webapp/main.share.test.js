@@ -1,11 +1,18 @@
 /**
  * @jest-environment jsdom
  */
-import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PANEL_ID = "vidcast";
 const PLAYER_URL =
   "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html";
+const STYLE_CSS_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "style.css",
+);
 
 function encodeHash(payload) {
   return "#" + Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
@@ -156,6 +163,16 @@ function selectVideo(main, id) {
 describe("real device Controller - Share in Call", () => {
   let xapi;
 
+  beforeAll(() => {
+    // Loaded for real so `getComputedStyle` assertions below reflect the
+    // actual cascade (e.g. .controls-share's unconditional `display: flex`
+    // vs. the [hidden] attribute) rather than just the DOM property, which
+    // is what let the real hidden-button bug slip past tests previously.
+    const style = document.createElement("style");
+    style.textContent = readFileSync(STYLE_CSS_PATH, "utf8");
+    document.head.appendChild(style);
+  });
+
   beforeEach(async () => {
     jest.resetModules();
     jest.unstable_mockModule("./webrtc.js", () => ({
@@ -179,7 +196,9 @@ describe("real device Controller - Share in Call", () => {
     ]);
     selectVideo(main, "1");
 
-    expect(document.getElementById("btn-share").hidden).toBe(true);
+    const shareButton = document.getElementById("btn-share");
+    expect(shareButton.hidden).toBe(true);
+    expect(getComputedStyle(shareButton).display).toBe("none");
   });
 
   it("keeps the Share button hidden when in a call that can't present", async () => {
@@ -192,7 +211,9 @@ describe("real device Controller - Share in Call", () => {
     setConferenceCallCapability(xapi, false);
     await flushPromises();
 
-    expect(document.getElementById("btn-share").hidden).toBe(true);
+    const shareButton = document.getElementById("btn-share");
+    expect(shareButton.hidden).toBe(true);
+    expect(getComputedStyle(shareButton).display).toBe("none");
   });
 
   it("shows the Share button once in a call that supports presenting", async () => {
@@ -207,6 +228,7 @@ describe("real device Controller - Share in Call", () => {
 
     const shareButton = document.getElementById("btn-share");
     expect(shareButton.hidden).toBe(false);
+    expect(getComputedStyle(shareButton).display).not.toBe("none");
     expect(shareButton.textContent).toContain("Share");
   });
 
@@ -246,6 +268,7 @@ describe("real device Controller - Share in Call", () => {
 
     const shareButton = document.getElementById("btn-share");
     expect(shareButton.hidden).toBe(false);
+    expect(getComputedStyle(shareButton).display).not.toBe("none");
     expect(shareButton.getAttribute("aria-pressed")).toBe("true");
     expect(shareButton.textContent).toContain("Stop Share");
   });

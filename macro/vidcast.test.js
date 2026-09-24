@@ -10,7 +10,8 @@ import {
 const macroName = "./vidcast.js";
 const panelId = "vidcast";
 const playlistId = "727b3694-97d2-4a6c-97b1-6511d17514d3";
-const playerUrl = "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html";
+const playerUrl =
+  "https://wxsd-sales.github.io/vidcast-webapp-macro/webapp/index.html";
 const playlistUrl = `https://api.vidcast.io/v1/playlists/${playlistId}/videos?page=0&pageSize=20&skipUnavailable=false`;
 
 const fallbackPlaylist = [
@@ -195,7 +196,13 @@ async function requestPlaylist(xapi, app, requestId = "request-1") {
   );
 }
 
-function expectPlaylistPackets({ packets, packetTexts, requestId, app, videos }) {
+function expectPlaylistPackets({
+  packets,
+  packetTexts,
+  requestId,
+  app,
+  videos,
+}) {
   const expectedContent = JSON.stringify(filterPlaylistForWebapp(videos));
 
   expect(packets.length).toBeGreaterThan(0);
@@ -241,11 +248,15 @@ describe("Vidcast macro", () => {
 
     await loadMacro(xapi);
 
-    expect(xapi.Command.UserInterface.Extensions.Panel.Save).toHaveBeenCalledWith(
+    expect(
+      xapi.Command.UserInterface.Extensions.Panel.Save,
+    ).toHaveBeenCalledWith(
       { PanelId: panelId },
       expect.stringContaining("<Name>Vidcast</Name>"),
     );
-    expect(xapi.Command.UserInterface.Extensions.Panel.Save).toHaveBeenCalledWith(
+    expect(
+      xapi.Command.UserInterface.Extensions.Panel.Save,
+    ).toHaveBeenCalledWith(
       { PanelId: panelId },
       expect.stringContaining(
         "<Icon>Custom</Icon><CustomIcon><Id>vidcast-icon</Id></CustomIcon>",
@@ -327,7 +338,9 @@ describe("Vidcast macro", () => {
       Url: playlistUrl,
       ResultBody: "PlainText",
     });
-    expect(xapi.Command.UserInterface.Extensions.Panel.Save).not.toHaveBeenCalled();
+    expect(
+      xapi.Command.UserInterface.Extensions.Panel.Save,
+    ).not.toHaveBeenCalled();
     expect(xapi.Command.UserManagement.User.Add).toHaveBeenCalledWith(
       expect.objectContaining({
         Role: ["Integrator", "User"],

@@ -20,6 +20,9 @@ export let APP_STATE = {
   interactive: false,
   demo: false,
   showLogo: true,
+  // Only meaningful on a real device Controller: whether the device is
+  // currently in a call that supports presenting into it.
+  canShareInCall: false,
   playback: {
     playing: false,
     paused: true,
@@ -38,6 +41,13 @@ let multiConn;
 let player;
 let playerController;
 let suppressNextHashBroadcast = false;
+
+// Real device "Share in Call" support: raw xStatus caches keyed by their
+// array index/id, kept in sync via subscription and used to derive whether
+// the Share button should be shown and whether we're currently presenting.
+let callStatuses = {};
+let conferenceCallStatuses = {};
+let presentationInstances = {};
 
 // --- Constants ---
 const LOGO_URL =
@@ -169,6 +179,13 @@ function setShareState(sharing) {
   updateShareUi();
 }
 
+// In the demo the Share button is always available and purely local; on a
+// real device it's only shown once we know the device is in a call that
+// supports presenting into it (see subscribeToShareCapability below).
+function canShowShareButton() {
+  return APP_STATE.demo || APP_STATE.canShareInCall;
+}
+
 function updateControlsPlaybackUi() {
   if (APP_STATE.mode !== "controls" || !APP_STATE.current) return;
 
@@ -220,11 +237,136 @@ function updateShareUi() {
   const shareButton = document.getElementById("btn-share");
   if (!shareButton) return;
 
+  shareButton.hidden = !canShowShareButton();
   shareButton.classList.toggle("is-sharing", APP_STATE.sharing);
   shareButton.setAttribute("aria-pressed", String(APP_STATE.sharing));
   shareButton.innerHTML = `${SHARE_ICON} ${
     APP_STATE.sharing ? "Stop Share" : "Share"
   }`;
+}
+
+// --- Real device "Share in Call" (Presentation) support ---
+
+function isGhostStatusEntry(entry) {
+  return typeof entry?.ghost == "string" && entry.ghost.toLowerCase() == "true";
+}
+
+function applyIndexedStatusUpdate(store, entry) {
+  const id = entry?.id;
+  if (id == null) return;
+
+  if (isGhostStatusEntry(entry)) {
+    delete store[id];
+  } else {
+    store[id] = { ...store[id], ...entry };
+  }
+}
+
+function isDeviceInCall() {
+  return Object.values(callStatuses).some((call) => call.Status == "Connected");
+}
+
+function canPresentInCurrentCall() {
+  return Object.values(conferenceCallStatuses).some(
+    (call) => call?.Capabilities?.Presentation == "True",
+  );
+}
+
+function isPresentingWebViewInCall() {
+  return Object.values(presentationInstances).some(
+    (instance) => String(instance.Source) == "1000",
+  );
+}
+
+function refreshShareAvailability() {
+  APP_STATE.canShareInCall = isDeviceInCall() && canPresentInCurrentCall();
+  APP_STATE.sharing = isPresentingWebViewInCall();
+  updateShareUi();
+}
+
+// Subscribes to the xStatuses needed to know whether this device is in a
+// call that supports presenting, and whether we're currently the one
+// presenting via this webview. Only ever called for a real device Controller.
+function subscribeToShareCapability() {
+  // Older RoomOS firmware may not expose every one of these xStatuses; don't
+  // let that take down the rest of the Controller if subscribing throws.
+  try {
+    xapi.Status.Call.on((call) => {
+      applyIndexedStatusUpdate(callStatuses, call);
+      refreshShareAvailability();
+    });
+
+    xapi.Status.Conference.Call.on((call) => {
+      applyIndexedStatusUpdate(conferenceCallStatuses, call);
+      refreshShareAvailability();
+    });
+
+    xapi.Status.Conference.Presentation.on((update) => {
+      if (Array.isArray(update?.LocalInstance)) {
+        update.LocalInstance.forEach((instance) =>
+          applyIndexedStatusUpdate(presentationInstances, instance),
+        );
+      }
+      refreshShareAvailability();
+    });
+  } catch (error) {
+    console.warn("Unable to subscribe to call/presentation status:", error);
+    return;
+  }
+
+  Promise.all([
+    xapi.Status.Call.get(),
+    xapi.Status.Conference.Call.get(),
+    xapi.Status.Conference.Presentation.get(),
+  ])
+    .then(([calls, conferenceCalls, presentation]) => {
+      for (const call of calls ?? []) applyIndexedStatusUpdate(callStatuses, call);
+      for (const call of conferenceCalls ?? [])
+        applyIndexedStatusUpdate(conferenceCallStatuses, call);
+      for (const instance of presentation?.LocalInstance ?? [])
+        applyIndexedStatusUpdate(presentationInstances, instance);
+      refreshShareAvailability();
+    })
+    .catch((error) => {
+      console.warn("Unable to query call/presentation status:", error);
+    });
+}
+
+async function findOsdWebViewId() {
+  const webviews = await xapi.Status.UserInterface.WebView.get();
+  const list = Array.isArray(webviews) ? webviews : [webviews].filter(Boolean);
+  const osdWebview = list.find((webview) => webview?.Target == "OSD");
+  return osdWebview ? Number(osdWebview.id) : null;
+}
+
+async function toggleRealPresentationShare() {
+  try {
+    const webViewId = await findOsdWebViewId();
+    if (webViewId == null) {
+      console.warn("Unable to find the OSD WebView to share into the call");
+      return;
+    }
+
+    if (APP_STATE.sharing) {
+      await xapi.Command.Presentation.Stop();
+      // Presentation.Stop hides the OSD WebView entirely (Status becomes
+      // NotVisible); restart it as a local-only presentation so it stays
+      // up on the OSD without being sent into the call.
+      await xapi.Command.Presentation.Start({
+        PresentationSource: "WebView",
+        SendingMode: "LocalOnly",
+        WebViewId: webViewId,
+      });
+    } else {
+      await xapi.Command.Presentation.Start({
+        PresentationSource: "WebView",
+        SendingMode: "LocalRemote",
+        WebViewId: webViewId,
+      });
+    }
+  } catch (error) {
+    console.warn("Unable to toggle Presentation sharing:", error);
+  }
 }
 
 export function localizeHashForSurface(hash = {}) {
@@ -345,6 +487,7 @@ function renderControlsState(video) {
   const playPauseIcon = APP_STATE.playback.playing ? PAUSE_ICON : PLAY_ICON;
   const shareClass = APP_STATE.sharing ? " is-sharing" : "";
   const shareLabel = APP_STATE.sharing ? "Stop Share" : "Share";
+  const shareHidden = canShowShareButton() ? "" : " hidden";
 
   return `
             <div class="controls-container">
@@ -389,7 +532,7 @@ function renderControlsState(video) {
                 <span class="controls-time" id="time-label">${formatPlaybackTime(
                   currentTime,
                 )} / ${formatPlaybackTime(duration)}</span>
-                <button class="controls-share${shareClass}" id="btn-share" aria-pressed="${APP_STATE.sharing}">${SHARE_ICON} ${shareLabel}</button>
+                <button class="controls-share${shareClass}" id="btn-share" aria-pressed="${APP_STATE.sharing}"${shareHidden}>${SHARE_ICON} ${shareLabel}</button>
               </div>
             </div>
           `;
@@ -587,6 +730,11 @@ function setupEventHandlers() {
 
     // Share in Call
     document.getElementById("btn-share").addEventListener("click", () => {
+      if (!APP_STATE.demo && xapi) {
+        toggleRealPresentationShare();
+        return;
+      }
+
       const sharing = !APP_STATE.sharing;
       setShareState(sharing);
       multiConn?.sendMessageToAll({
@@ -851,6 +999,7 @@ async function main() {
       APP_STATE.demo = isTruthy(hashes.demo);
       APP_STATE.showLogo = resolveShowLogo(hashes.showLogo);
       console.log("app state", APP_STATE);
+      if (APP_STATE.mode === "controls") subscribeToShareCapability();
       multiConn = new MultiWebRTCDataConnection(xapi, APP_STATE.mode, app);
       // Send a message to all connected webviews
     } catch (err) {
